@@ -4,12 +4,64 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
+using Debitos.Views;
+using Debitos.Presenters;
+using Debitos.Repositories;
 using System.Security.Cryptography;
 
 namespace Debitos;
 
-public partial class Form1 : Form
+public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la interfaz
 {
+    private PrestacionesPresenter _presenter; // <-- El presentador
+    public event EventHandler BuscarDocumentoEvent; // <-- El evento que pide la interfaz
+
+    // Implementación de las propiedades para manejar la UI desde el Presentador
+    public DataTable DatosGrilla
+    {
+        get => (DataTable)bindingSource.DataSource;
+        set
+        {
+            bindingSource.DataSource = value;
+            dataGridView1.DataSource = bindingSource;
+            lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + value?.Rows.Count;
+            lblCantidadDeRegistrosFiltrados.Visible = true;
+
+            AplicarFormatoYVisibilidadPorTipoFactura(value?.Rows.Count ?? 0);
+
+            // NUEVO: Generar los combos automáticamente desde los datos recibidos
+            if (value != null && value.Rows.Count > 0)
+            {
+                InicializarFiltrosDesdeMemoria(value);
+
+                // Ponemos visibles los filtros
+                SetControlesVisibles(true);
+            }
+        }
+    }
+
+    public bool BotonBuscarVisible
+    {
+        get => btnBuscar.Visible;
+        set => btnBuscar.Visible = value;
+    }
+
+    // Implementación explícita de la interfaz para no romper la lógica de tus parámetros 'out'
+    string IPrestacionesView.FacturaTipo => this.FacturaTipo;
+    string IPrestacionesView.FacturaLetra => this.FacturaLetra;
+    int IPrestacionesView.FacturaPuntoDeVenta => this.FacturaPuntoDeVenta;
+    int IPrestacionesView.FacturaNumero => this.FacturaNumero;
+
+    public void MostrarMensaje(string mensaje)
+    {
+        MessageBox.Show(mensaje);
+    }
+
+    public void MostrarCargando(bool mostrar)
+    {
+        this.UseWaitCursor = mostrar;
+        btnBuscar.Enabled = !mostrar;
+    }
 
     private BindingSource bindingSource = new BindingSource();
 
@@ -101,9 +153,7 @@ public partial class Form1 : Form
     public string comandoBusquedaDeGuardadoParcialEnTabla = @"SELECT * FROM cargaincompleta where tipodocumento = @tipodocumento AND letra = @letra AND ptovta = @ptovta AND numero = @numero;";
 
     public string comandoSeleccionAmbLiquidado = "SELECT al.id, al.paciente, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, al.cob_factura_tipo, al.cob_factura_letra, al.cob_factura_ptoventa, al.cob_factura_numero, al.porcentaje_especialista, al.porcentaje_ayudante1, al.porcentaje_anestesista, al.porcentaje_gastos, nc.motivodedebito, nc.importedebitado, nc.debitoaceptado FROM amb_liquidado al LEFT JOIN notadecredito nc ON al.id = nc.id_prestacion";
-    public string cadenaConexion = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
-    public NpgsqlConnection connection = new NpgsqlConnection("Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;");
-
+    
     protected bool primerFiltroFecha = false;
     protected bool cargaListaPaciente = false;
     protected bool cargaListaModulo = false;
@@ -116,13 +166,9 @@ public partial class Form1 : Form
     protected bool cargaListaFacturaNumero = false;
     protected bool cargaListaNumeroDeInternacion = false;
 
+    public string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
     protected string cargaMotivoDeDebitos = "SELECT DISTINCT descripcion from motivodeldebito ORDER BY descripcion ASC";
-    public string comandoLlenadoFiltroPaciente = "";
-    public string comandoLlenadoFiltroFecha = "";
-    public string comandoLlenadoFiltroProfesional = "";
-    public string comandoLlenadoFiltroPrestacion = "";
-    public string comandoLlenadoFiltroModulo = "";
-    public string comandoLlenadoFiltroNumeroDeinternacion = "";
+    
 
     protected IngresoInformacionNotaDeCredito ingresoInformacionNotaDeCredito;
     protected IngresoInformacionNotaDeDebito ingresoInformacionNotaDeDebito;
@@ -220,234 +266,29 @@ public partial class Form1 : Form
 
         dataGridView1.DoubleBuffered(true);
 
+        // (Al final del constructor)
+        string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
+        var repository = new DebitosRepository(connectionString);
+        _presenter = new PrestacionesPresenter(this, repository);
+
     }
 
     private void checkPrestacionesSinRefactura_CheckedChanged(object sender, EventArgs e)
     {
-        switch (FacturaTipo)
-        {
-            case "FC":
-                GuardarValoresAntesDeDeshacerFiltro();
-                break;
-            case "NC":
-                GuardarValoresAntesDeDeshacerFiltroNC();
-                break;
-            case "ND":
-                GuardarValoresAntesDeDeshacerFiltro();
-                break;
-        }
-        if (checkPrestacionesSinRefactura.CheckState == CheckState.Checked)
-        {
-            btnBorrarFiltros.Visible = true;
-            // Obtener el DataTable actualmente visualizado
-            DataTable dataTableActual = null;
-            if (dataGridView1.DataSource is BindingSource bs)
-                dataTableActual = bs.DataSource as DataTable;
-            else if (dataGridView1.DataSource is DataTable dt)
-                dataTableActual = dt;
-
-            if (dataTableActual == null)
-                return;
-
-            if (checkPrestacionesSinRefactura.CheckState == CheckState.Checked)
-            {
-                string selector = "";
-                switch (FacturaTipo)
-                {
-                    case "FC":
-                        selector = "nc_motivoderefactura IS NULL OR nc_motivoderefactura = ''";
-                        break;
-                    case "NC":
-                        selector = "ND_MotivoDeRefactura IS NULL OR ND_MotivoDeRefactura = ''";
-                        break;
-                    case "ND":
-                        selector = "nc_motivoderefactura IS NULL OR nc_motivoderefactura = ''";
-                        break;
-                }
-
-                DataRow[] filasFiltradas = dataTableActual.Select(selector);
-                DataTable dataTableFiltrado = dataTableActual.Clone();
-                foreach (DataRow fila in filasFiltradas)
-                    dataTableFiltrado.ImportRow(fila);
-
-                dataGridView1.DataSource = dataTableFiltrado;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableFiltrado);
-            }
-            else
-            {
-                // Mostrar todos los registros originales
-                dataGridView1.DataSource = dataTableActual;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableActual.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableActual);
-            }
-        }
-        else
-        {
-            DataTable aux = new DataTable();
-            if (!algunFiltro)
-            {
-                btnBorrarFiltros.Visible = false;
-                dataGridView1.DataSource = auxFiltros;
-                aux = auxFiltros;
-            }
-            else
-            {
-                dataGridView1.DataSource = tablaSinFiltro;
-                aux = tablaSinFiltro;
-            }
-
-            ActualizarFiltrosDisponibles(aux);
-            AplicarFormatoYVisibilidadPorTipoFactura(aux.Rows.Count);
-            ActualizarFiltrosDisponibles(aux);
-        }
-        restaurarValoresPreviosAFiltro();
-        cargaListaPaciente = false;
-        cargaListaModulo = false;
-        cargaListaProfesional = false;
-        cargaListaPrestacion = false;
-        cargaListaFecha = false;
-        contarFilasConDebitoAceptado();
+        GuardarValoresAntesDeDeshacerFiltro();
+        AplicarFiltrosActivos();
     }
 
     private void checkPrestacionesSinDebito_CheckedChanged(object sender, EventArgs e)
     {
         GuardarValoresAntesDeDeshacerFiltro();
-        if (checkPrestacionesSinDebito.CheckState == CheckState.Checked)
-        {
-            btnBorrarFiltros.Visible = true;
-            // Obtener el DataTable actualmente visualizado
-            DataTable dataTableActual = null;
-            if (dataGridView1.DataSource is BindingSource bs)
-                dataTableActual = bs.DataSource as DataTable;
-            else if (dataGridView1.DataSource is DataTable dt)
-                dataTableActual = dt;
-
-            if (dataTableActual == null)
-                return;
-
-            if (checkPrestacionesSinDebito.CheckState == CheckState.Checked)
-            {
-                // Filtrar las filas donde modulo == 0
-                DataRow[] filasFiltradas = dataTableActual.Select("nc_motivodedebito IS NULL OR nc_motivodedebito = ''");
-                DataTable dataTableFiltrado = dataTableActual.Clone();
-                foreach (DataRow fila in filasFiltradas)
-                    dataTableFiltrado.ImportRow(fila);
-
-                dataGridView1.DataSource = dataTableFiltrado;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableFiltrado);
-            }
-            else
-            {
-                // Mostrar todos los registros originales
-                dataGridView1.DataSource = dataTableActual;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableActual.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableActual);
-            }
-
-        }
-        else
-        {
-            DataTable aux = new DataTable();
-            if (!algunFiltro)
-            {
-                btnBorrarFiltros.Visible = false;
-                dataGridView1.DataSource = auxFiltros;
-                aux = auxFiltros;
-            }
-            else
-            {
-                dataGridView1.DataSource = tablaSinFiltro;
-                aux = tablaSinFiltro;
-            }
-
-            ActualizarFiltrosDisponibles(aux);
-            AplicarFormatoYVisibilidadPorTipoFactura(aux.Rows.Count);
-        }
-        restaurarValoresPreviosAFiltro();
-        cargaListaPaciente = false;
-        cargaListaModulo = false;
-        cargaListaProfesional = false;
-        cargaListaPrestacion = false;
-        cargaListaFecha = false;
-        contarFilasConDebitoAceptado();
+        AplicarFiltrosActivos();
     }
 
     private void soloPrestacionesValorizadas_CheckedChanged(object sender, EventArgs e)
     {
-        switch (FacturaTipo)
-        {
-            case "FC":
-                GuardarValoresAntesDeDeshacerFiltro();
-                break;
-            case "NC":
-                GuardarValoresAntesDeDeshacerFiltroNC();
-                break;
-            case "ND":
-                GuardarValoresAntesDeDeshacerFiltro();
-                break;
-        }
-
-        if (soloPrestacionesValorizadas.CheckState == CheckState.Checked)
-        {
-            btnBorrarFiltros.Visible = true;
-            // Obtener el DataTable actualmente visualizado
-            DataTable dataTableActual = null;
-            if (dataGridView1.DataSource is BindingSource bs)
-                dataTableActual = bs.DataSource as DataTable;
-            else if (dataGridView1.DataSource is DataTable dt)
-                dataTableActual = dt;
-
-            if (dataTableActual == null || !dataTableActual.Columns.Contains("modulo"))
-                return;
-
-            if (soloPrestacionesValorizadas.CheckState == CheckState.Checked)
-            {
-                // Filtrar las filas donde modulo == 0
-                DataRow[] filasFiltradas = dataTableActual.Select("total <> 0");
-                DataTable dataTableFiltrado = dataTableActual.Clone();
-                foreach (DataRow fila in filasFiltradas)
-                    dataTableFiltrado.ImportRow(fila);
-
-                dataGridView1.DataSource = dataTableFiltrado;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableFiltrado);
-            }
-            else
-            {
-                // Mostrar todos los registros originales
-                dataGridView1.DataSource = dataTableActual;
-                AplicarFormatoYVisibilidadPorTipoFactura(dataTableActual.Rows.Count);
-                ActualizarFiltrosDisponibles(dataTableActual);
-            }
-        }
-        else
-        {
-            DataTable aux = new DataTable();
-            if (!algunFiltro)
-            {
-                btnBorrarFiltros.Visible = false;
-                dataGridView1.DataSource = auxFiltros;
-                aux = auxFiltros;
-            }
-            else
-            {
-                dataGridView1.DataSource = tablaSinFiltro;
-                aux = tablaSinFiltro;
-            }
-
-            ActualizarFiltrosDisponibles(aux);
-            AplicarFormatoYVisibilidadPorTipoFactura(aux.Rows.Count);
-            ActualizarFiltrosDisponibles(aux);
-        }
-        restaurarValoresPreviosAFiltro();
-        cargaListaPaciente = false;
-        cargaListaModulo = false;
-        cargaListaProfesional = false;
-        cargaListaPrestacion = false;
-        cargaListaFecha = false;
-        contarFilasConDebitoAceptado();
+        GuardarValoresAntesDeDeshacerFiltro();
+        AplicarFiltrosActivos();
     }
 
     public void resetearVariables()
@@ -529,11 +370,6 @@ public partial class Form1 : Form
         cargaListaFacturaLetra = false;
         cargaListaFacturaPuntoDeVenta = false;
         cargaListaFacturaNumero = false;
-        comandoLlenadoFiltroPaciente = "";
-        comandoLlenadoFiltroFecha = "";
-        comandoLlenadoFiltroProfesional = "";
-        comandoLlenadoFiltroPrestacion = "";
-        comandoLlenadoFiltroNumeroDeinternacion = "";
 
         documentoEncontrado = false;
         cargaParcialPreviamenteCreada = false;
@@ -557,16 +393,23 @@ public partial class Form1 : Form
         RestaurarUIFiltros();
         algunFiltro = false;
 
-        // Restaurar RowFilter
-        if (bindingSource.DataSource is DataTable dt)
-        {
-            dt.DefaultView.RowFilter = string.Empty;
-        }
+        // LA SOLUCIÓN: Limpiamos la máscara, NO el DataSource
+        bindingSource.Filter = string.Empty;
 
-        dataGridView1.DataSource = tablaCompletaSinFiltros;
-        tablaSinFiltro = tablaCompletaSinFiltros;
+        // Desmarcamos los checkboxes silenciando los eventos
+        checkPrestacionesSinDebito.CheckedChanged -= checkPrestacionesSinDebito_CheckedChanged;
+        checkPrestacionesSinRefactura.CheckedChanged -= checkPrestacionesSinRefactura_CheckedChanged;
+        soloPrestacionesValorizadas.CheckedChanged -= soloPrestacionesValorizadas_CheckedChanged;
 
-        // Restaurar los DataSource originales de los ComboBox de filtros
+        checkPrestacionesSinDebito.Checked = false;
+        checkPrestacionesSinRefactura.Checked = false;
+        soloPrestacionesValorizadas.Checked = false;
+
+        checkPrestacionesSinDebito.CheckedChanged += checkPrestacionesSinDebito_CheckedChanged;
+        checkPrestacionesSinRefactura.CheckedChanged += checkPrestacionesSinRefactura_CheckedChanged;
+        soloPrestacionesValorizadas.CheckedChanged += soloPrestacionesValorizadas_CheckedChanged;
+
+        // Restaurar los DataSource originales
         cargaListaPaciente = true;
         filtroPaciente.DataSource = filtroPacienteOriginal;
         cargaListaPrestacion = true;
@@ -577,20 +420,8 @@ public partial class Form1 : Form
         filtroModulo.DataSource = filtroModuloOriginal;
         cargaListaNumeroDeInternacion = true;
         filtroNumeroDeInternacion.DataSource = filtroNumeroDeInternacionOriginal;
-
         cargaListaFecha = true;
         comboFiltroFecha.DataSource = filtroFechaOriginal;
-
-
-        // Volver a mostrar filtros
-        filtroPaciente.Visible = true;
-        filtroProfesional.Visible = true;
-        filtroPrestacion.Visible = true;
-
-        // Ocultar etiquetas de selección
-        lblPacSel.Visible = true;
-        lblProfSel.Visible = true;
-        lblPrestSel.Visible = true;
 
         // Reset de flags
         ordenFiltros.Clear();
@@ -608,12 +439,6 @@ public partial class Form1 : Form
         lblPrestSel.Text = "Prestación";
         comboFiltroFecha.Visible = true;
 
-        checkPrestacionesSinDebito.Checked = false;
-        checkPrestacionesSinRefactura.Checked = false;
-        soloPrestacionesValorizadas.Checked = false;
-
-
-        // Actualizar grilla
         dataGridView1.Refresh();
         AplicarFormatoYVisibilidadPorTipoFactura(bindingSource.Count);
         ActualizarCantidadDeRegistrosFiltrados();
@@ -656,6 +481,36 @@ public partial class Form1 : Form
                 GuardarValoresAntesDeDeshacerFiltro();
                 break;
         }
+    }
+
+    private void InicializarFiltrosDesdeMemoria(DataTable datos)
+    {
+        ActualizarFiltrosDisponibles(datos);
+
+        filtroPacienteOriginal = (DataTable)filtroPaciente.DataSource;
+        filtroPrestacionOriginal = (DataTable)filtroPrestacion.DataSource;
+        filtroMedicoOriginal = (DataTable)filtroProfesional.DataSource;
+        filtroModuloOriginal = (DataTable)filtroModulo.DataSource;
+        filtroNumeroDeInternacionOriginal = (DataTable)filtroNumeroDeInternacion.DataSource;
+        filtroFechaOriginal = comboFiltroFecha.DataSource as DataTable;
+
+        tablaCompletaSinFiltros = datos.Copy();
+        tablaSinFiltro = datos.Copy();
+        auxFiltros = datos.Copy();
+
+        filtroPacienteSinFiltros = filtroPacienteOriginal;
+        filtroMedicoSinFiltros = filtroMedicoOriginal;
+        filtroPrestacionSinFiltros = filtroPrestacionOriginal;
+        filtroModuloSinFiltros = filtroModuloOriginal;
+        filtroNumeroDeInternacionSinFiltros = filtroNumeroDeInternacionOriginal;
+
+        // EL DESBLOQUEO CRÍTICO: Esto vuelve a habilitar los clics del usuario
+        cargaListaPaciente = false;
+        cargaListaProfesional = false;
+        cargaListaPrestacion = false;
+        cargaListaModulo = false;
+        cargaListaNumeroDeInternacion = false;
+        cargaListaFecha = false;
     }
 
     private void RestaurarUIFiltros()
@@ -828,117 +683,108 @@ public partial class Form1 : Form
 
     private void filtroModulo_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaListaModulo)
-        {
-            FiltrarPorModulo();
-        }
-        cargaListaModulo = false;
-    }
-
-    private void FiltrarPorModulo()
-    {
-        algunFiltro = true;
+        if (cargaListaModulo || filtroModulo.SelectedIndex <= 0) return;
         GuardarValoresAntesDeDeshacerFiltro();
-        btnBorrarFiltros.Visible = true;
-
-        string moduloSeleccionado = filtroModulo.Text.Replace("'", "''");
-
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
-
-        // Filtrar primero por grupomodulo, luego por modulo
-        DataRow[] filasGrupoModulo = dataTableActual.Select($"grupomodulo = '{moduloSeleccionado}'");
-        DataRow[] filasModulo = dataTableActual.Select($"modulo = '{moduloSeleccionado}'");
-
-        DataTable dataTableFiltrado = dataTableActual.Clone();
-
-        // Agregar primero los registros donde grupomodulo coincide
-        foreach (DataRow fila in filasGrupoModulo)
-            dataTableFiltrado.ImportRow(fila);
-
-        // Luego agregar los registros donde modulo coincide, evitando duplicados
-        foreach (DataRow fila in filasModulo)
-        {
-            // Evitar duplicados si ya está en el filtrado por grupomodulo
-            bool yaAgregado = filasGrupoModulo.Any(f => f.Equals(fila));
-            if (!yaAgregado)
-                dataTableFiltrado.ImportRow(fila);
-        }
-
-        dataGridView1.DataSource = dataTableFiltrado;
-        tablaSinFiltro = dataTableFiltrado;
-        auxFiltros = dataTableFiltrado;
-
-        dataGridView1.Columns["modulo"].Visible = true;
-        dataGridView1.Columns["grupomodulo"].Visible = true;
-
-        filtroModulo.Visible = false;
-        ordenFiltros.Add("Módulo");
-
-        AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-        ActualizarFiltrosDisponibles(dataTableFiltrado);
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
-        contarFilasConDebitoAceptado();
-
-        lblModulo.Text = "Módulo: " + moduloSeleccionado;
+        lblModulo.Text = "Módulo: " + filtroModulo.Text;
         lblModulo.TextAlign = ContentAlignment.TopRight;
         lblModulo.Visible = true;
+        filtroModulo.Visible = false;
+        AplicarFiltrosActivos();
     }
 
     private void filtroPaciente_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaListaPaciente)
-        {
-            FiltrarPorPaciente();
-        }
-        cargaListaPaciente = false;
+        if (cargaListaPaciente || filtroPaciente.SelectedIndex <= 0) return;
+        GuardarValoresAntesDeDeshacerFiltro();
+        lblPacSel.Text = "Paciente: " + filtroPaciente.Text;
+        lblPacSel.Visible = true;
+        filtroPaciente.Visible = false;
+        AplicarFiltrosActivos();
     }
 
-    private void FiltrarPorPaciente()
+    private void AplicarFiltrosActivos()
     {
-        algunFiltro = true;
-        GuardarValoresAntesDeDeshacerFiltro();
-        btnBorrarFiltros.Visible = true;
+        if (bindingSource.DataSource == null) return;
 
-        string pacienteSeleccionado = filtroPaciente.Text.Replace("'", "''");
+        List<string> filtros = new List<string>();
+        DataTable dt = (DataTable)bindingSource.DataSource;
 
-        // Obtener el DataTable actualmente visualizado
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
+        if (lblPacSel.Visible)
+            filtros.Add($"paciente = '{lblPacSel.Text.Replace("Paciente: ", "").Trim().Replace("'", "''")}'");
 
-        // Filtrar el DataTable actual por el paciente seleccionado
-        DataRow[] filasFiltradas = dataTableActual.Select($"paciente = '{pacienteSeleccionado}'");
-        DataTable dataTableFiltrado = dataTableActual.Clone();
-        foreach (DataRow fila in filasFiltradas)
-            dataTableFiltrado.ImportRow(fila);
+        if (lblProfSel.Visible)
+            filtros.Add($"medico = '{lblProfSel.Text.Replace("Profesional: ", "").Trim().Replace("'", "''")}'");
 
-        // Actualizar el DataGridView con el nuevo DataTable filtrado
-        dataGridView1.DataSource = dataTableFiltrado;
-        tablaSinFiltro = dataTableFiltrado;
-        auxFiltros = dataTableFiltrado;
+        if (lblPrestSel.Visible)
+            filtros.Add($"codigo = '{lblPrestSel.Text.Replace("Prestación: ", "").Trim().Replace("'", "''")}'");
 
-        filtroPaciente.Visible = false;
-        lblPacSel.Text = "Paciente: " + pacienteSeleccionado;
-        lblPacSel.Visible = true;
+        if (lblModulo.Visible && lblModulo.Text.StartsWith("Módulo:"))
+        {
+            string mod = lblModulo.Text.Replace("Módulo: ", "").Trim().Replace("'", "''");
+            if (dt.Columns.Contains("grupomodulo"))
+                filtros.Add($"(grupomodulo = '{mod}' OR modulo = '{mod}')");
+            else
+                filtros.Add($"modulo = '{mod}'");
+        }
 
-        ordenFiltros.Add("Paciente");
+        if (lblNumeroDeInternacionSel.Visible)
+        {
+            string nro = lblNumeroDeInternacionSel.Text.Replace("Número de internación: ", "").Trim().Replace("'", "''");
+            string colNro = dt.Columns.Contains("nro_internacion") ? "nro_internacion" : "nro_int";
+            filtros.Add($"{colNro} = '{nro}'");
+        }
 
-        AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
+        if (lblFecSel.Visible)
+        {
+            string fec = lblFecSel.Text.Replace("Fecha: ", "").Trim();
+            if (DateTime.TryParse(fec, out DateTime dateValue))
+                filtros.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture, "fecha = #{0:MM/dd/yyyy}#", dateValue));
+        }
 
-        // Recargar los combos de filtros con los valores posibles tras el filtro
-        ActualizarFiltrosDisponibles(dataTableFiltrado);
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
+        // --- CHECKBOXES INTEGRADAS ---
+        if (checkPrestacionesSinRefactura.Checked)
+        {
+            if (FacturaTipo == "FC" || FacturaTipo == "ND")
+                filtros.Add("(nc_motivoderefactura IS NULL OR nc_motivoderefactura = '')");
+            else if (FacturaTipo == "NC")
+                filtros.Add("(nd_motivoderefactura IS NULL OR nd_motivoderefactura = '')");
+        }
+
+        if (checkPrestacionesSinDebito.Checked)
+            filtros.Add("(nc_motivodedebito IS NULL OR nc_motivodedebito = '')");
+
+        if (soloPrestacionesValorizadas.Checked)
+            filtros.Add("total <> 0");
+        // -----------------------------
+
+        string filtroFinal = string.Join(" AND ", filtros);
+
+        try
+        {
+            bindingSource.Filter = filtroFinal;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Error aplicando el filtro: " + ex.Message);
+            return;
+        }
+
+        algunFiltro = filtros.Count > 0;
+        btnBorrarFiltros.Visible = algunFiltro;
+        AplicarFormatoYVisibilidadPorTipoFactura(bindingSource.Count);
+        ActualizarCantidadDeRegistrosFiltrados();
         contarFilasConDebitoAceptado();
+
+        DataView vistaFiltrada = new DataView(dt);
+        vistaFiltrada.RowFilter = filtroFinal;
+        ActualizarFiltrosDisponibles(vistaFiltrada.ToTable());
+
+        cargaListaPaciente = false;
+        cargaListaProfesional = false;
+        cargaListaPrestacion = false;
+        cargaListaModulo = false;
+        cargaListaNumeroDeInternacion = false;
+        cargaListaFecha = false;
     }
 
     private void AplicarFormatoYVisibilidadPorTipoFactura(int cantidadFilas)
@@ -966,15 +812,14 @@ public partial class Form1 : Form
         }
         lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + cantidadFilas;
     }
-
-
     private void filtroProfesional_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaListaProfesional)
-        {
-            FiltrarPorProfesional();
-        }
-        cargaListaProfesional = false;
+        if (cargaListaProfesional || filtroProfesional.SelectedIndex <= 0) return;
+        GuardarValoresAntesDeDeshacerFiltro();
+        lblProfSel.Text = "Profesional: " + filtroProfesional.Text;
+        lblProfSel.Visible = true;
+        filtroProfesional.Visible = false;
+        AplicarFiltrosActivos();
     }
 
     private void habilitarFiltros()
@@ -987,87 +832,14 @@ public partial class Form1 : Form
         cargaListaProfesional = false;
     }
 
-    private void FiltrarPorProfesional()
-    {
-        algunFiltro = true;
-        GuardarValoresAntesDeDeshacerFiltro();
-        btnBorrarFiltros.Visible = true;
-
-        string profesionalSeleccionado = filtroProfesional.Text.Replace("'", "''");
-
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
-
-        DataRow[] filasFiltradas = dataTableActual.Select($"medico = '{profesionalSeleccionado}'");
-        DataTable dataTableFiltrado = dataTableActual.Clone();
-        foreach (DataRow fila in filasFiltradas)
-            dataTableFiltrado.ImportRow(fila);
-
-        dataGridView1.DataSource = dataTableFiltrado;
-        tablaSinFiltro = dataTableFiltrado;
-        auxFiltros = dataTableFiltrado;
-
-        filtroProfesional.Visible = false;
-        lblProfSel.Text = "Profesional: " + profesionalSeleccionado;
-        lblProfSel.Visible = true;
-
-        ordenFiltros.Add("Profesional");
-
-        AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-        ActualizarFiltrosDisponibles(dataTableFiltrado);
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
-        contarFilasConDebitoAceptado();
-    }
-
     private void filtroPrestacion_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaListaPrestacion)
-        {
-            FiltrarPorPrestacion();
-        }
-        cargaListaPrestacion = false;
-    }
-
-    private void FiltrarPorPrestacion()
-    {
-        algunFiltro = true;
+        if (cargaListaPrestacion || filtroPrestacion.SelectedIndex <= 0) return;
         GuardarValoresAntesDeDeshacerFiltro();
-        btnBorrarFiltros.Visible = true;
-
-        string prestacionSeleccionada = filtroPrestacion.Text.Replace("'", "''");
-
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
-
-        DataRow[] filasFiltradas = dataTableActual.Select($"codigo = '{prestacionSeleccionada}'");
-        DataTable dataTableFiltrado = dataTableActual.Clone();
-        foreach (DataRow fila in filasFiltradas)
-            dataTableFiltrado.ImportRow(fila);
-
-        dataGridView1.DataSource = dataTableFiltrado;
-        tablaSinFiltro = dataTableFiltrado;
-        auxFiltros = dataTableFiltrado;
-
-        filtroPrestacion.Visible = false;
-        lblPrestSel.Text = "Prestación: " + prestacionSeleccionada;
+        lblPrestSel.Text = "Prestación: " + filtroPrestacion.Text;
         lblPrestSel.Visible = true;
-
-        ordenFiltros.Add("Prestacion");
-
-        AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-        ActualizarFiltrosDisponibles(dataTableFiltrado);
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
-        contarFilasConDebitoAceptado();
+        filtroPrestacion.Visible = false;
+        AplicarFiltrosActivos();
     }
 
     private void evaluarPrestacionEnglobante()
@@ -1310,188 +1082,6 @@ public partial class Form1 : Form
         }
     }
 
-    private void CargarDatosDocumento()
-    {
-        using var connection = new NpgsqlConnection(cadenaConexion);
-        connection.Open();
-        using var command = new NpgsqlCommand(comandoSeleccionAmbLiquidado, connection);
-        command.Parameters.AddWithValue("@FacturaLetra", FacturaLetra);
-        command.Parameters.AddWithValue("@FacturaPuntoVenta", FacturaPuntoDeVenta);
-        command.Parameters.AddWithValue("@FacturaNumero", FacturaNumero);
-
-        using var adapter = new NpgsqlDataAdapter(command);
-        //tablaAMostrar.Clear();
-        adapter.Fill(tablaAMostrar);
-
-        guardarRegistrosPreviosEnBDD(tablaAMostrar);
-
-        lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + tablaAMostrar.Rows.Count;
-        lblCantidadDeRegistrosFiltrados.Visible = true;
-        documentoEncontrado = true;
-        btnLimpiarFila.Visible = true;
-        bindingSource.DataSource = tablaAMostrar;
-        dataGridView1.DataSource = bindingSource;
-        tablaSinFiltro = tablaAMostrar;
-
-        tablaCompletaSinFiltros = tablaAMostrar.Copy();
-        aUsarParaLimpiarFiltroAnterior = tablaAMostrar.Copy();
-        tablasFiltradas.Add(tablaCompletaSinFiltros);
-
-        // Configuración de columnas y valores según tipo de factura
-        switch (FacturaTipo)
-        {
-            case "FC":
-                contarFilasConDebitoAceptado();
-                if (dataGridView1.Columns.Contains("NC_MotivoDeDebito"))
-                    dataGridView1.Columns["NC_MotivoDeDebito"].ReadOnly = true;
-                if (dataGridView1.Columns.Contains("NC_Fecha"))
-                    dataGridView1.Columns["NC_Fecha"].Visible = false;
-                if (dataGridView1.Columns.Contains("NC_Letra"))
-                    dataGridView1.Columns["NC_Letra"].Visible = false;
-                if (dataGridView1.Columns.Contains("NC_PuntoDeVenta"))
-                    dataGridView1.Columns["NC_PuntoDeVenta"].Visible = false;
-                if (dataGridView1.Columns.Contains("NC_Numero"))
-                    dataGridView1.Columns["NC_Numero"].Visible = false;
-                if (dataGridView1.Columns.Contains("modulo"))
-                    dataGridView1.Columns["modulo"].Visible = false;
-                if (dataGridView1.Columns.Contains("grupomodulo"))
-                    dataGridView1.Columns["grupomodulo"].Visible = false;
-                foreach (DataGridViewRow row in dataGridView1.Rows)
-                {
-                    if (row.Cells["NC_MotivoDeRefactura"].Value?.ToString().Trim() == "No aplica")
-                    {
-                        cargaPrimeraVez = true;
-                        row.Cells["nc_importederefactura"].ReadOnly = true;
-                        row.Cells["nc_comentarios"].ReadOnly = false;
-                        row.Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.LightGray;
-                    }
-                }
-                GuardarValoresAntesDeOrdenar();
-                break;
-            case "NC":
-                if (dataGridView1.Columns.Contains("NC_MotivoDeDebito"))
-                    dataGridView1.Columns["NC_MotivoDeDebito"].ReadOnly = true;
-                if (dataGridView1.Columns.Contains("ND_MotivoDeRefactura"))
-                    dataGridView1.Columns["ND_MotivoDeRefactura"].ReadOnly = true;
-                if (dataGridView1.Columns.Contains("modulo"))
-                    dataGridView1.Columns["modulo"].Visible = false;
-                if (dataGridView1.Columns.Contains("grupomodulo"))
-                    dataGridView1.Columns["grupomodulo"].Visible = false;
-                GuardarValoresAntesDeOrdenarNC();
-                break;
-            case "ND":
-                contarFilasConDebitoAceptado();
-                dataGridView1.Columns["modulo"].Visible = false;
-                dataGridView1.Columns["grupomodulo"].Visible = false;
-                foreach (DataGridViewRow row in dataGridView1.Rows)
-                {
-                    if (row.Cells["NC_MotivoDeRefactura"].Value?.ToString().Trim() == "No aplica")
-                    {
-                        cargaPrimeraVez = true;
-                        row.Cells["nc_importederefactura"].ReadOnly = true;
-                        row.Cells["nc_comentarios"].ReadOnly = false;
-                        row.Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.LightGray;
-                    }
-                }
-                break;
-        }
-        cargaPrimeraVez = false;
-    }
-
-    private void CargarFiltros()
-    {
-        btnExportar.Visible = true;
-        using var connection = new NpgsqlConnection(cadenaConexion);
-        connection.Open();
-        cargaListaNumeroDeInternacion = true;
-
-        // Paciente
-        CargarFiltro(comandoLlenadoFiltroPaciente, "paciente", filtroPaciente, tablasFiltrosPaciente, "Paciente");
-        // Fecha
-        CargarFiltroFecha();
-        // Profesional
-        CargarFiltro(comandoLlenadoFiltroProfesional, "medico", filtroProfesional, tablasFiltrosMedico, "Profesional");
-        // Prestación
-        CargarFiltro(comandoLlenadoFiltroPrestacion, "codigo", filtroPrestacion, tablasFiltrosPrestacion, "Prestación");
-        // Prestación
-        if (TipoRegistroFiltrado == "Ambulatorios")
-        { }
-        else
-        {
-            CargarFiltro(comandoLlenadoFiltroModulo, "modulo", filtroModulo, tablasFiltrosModulo, "modulo");
-        }
-
-        // Número de internación (solo si corresponde)
-        if (!string.IsNullOrEmpty(comandoLlenadoFiltroNumeroDeinternacion))
-            CargarFiltro(comandoLlenadoFiltroNumeroDeinternacion, "nro_internacion", filtroNumeroDeInternacion, tablasFiltrosNumeroDeInternacion, "nro_internacion");
-    }
-
-    private void CargarFiltro(string comando, string columna, ComboBox combo, List<DataTable> listaFiltros, string displayName)
-    {
-        using var connection = new NpgsqlConnection(cadenaConexion);
-        connection.Open();
-        using var command = new NpgsqlCommand(comando, connection);
-        command.Parameters.AddWithValue("@FacturaLetra", FacturaLetra);
-        command.Parameters.AddWithValue("@FacturaPuntoVenta", FacturaPuntoDeVenta);
-        command.Parameters.AddWithValue("@FacturaNumero", FacturaNumero);
-
-        using var adapter = new NpgsqlDataAdapter(command);
-        DataTable dataTable = new DataTable();
-        dataTable.Columns.Add(columna, typeof(string));
-        dataTable.Rows.Add(displayName);
-        adapter.Fill(dataTable);
-        switch (displayName)
-        {
-            case "Paciente":
-                filtroPacienteSinFiltros = dataTable.Copy();
-                break;
-            case "nro_internacion":
-                filtroNumeroDeInternacionSinFiltros = dataTable.Copy();
-                break;
-            case "Profesional":
-                filtroMedicoSinFiltros = dataTable.Copy();
-                break;
-            case "Prestación":
-                filtroPrestacionSinFiltros = dataTable.Copy();
-                break;
-            case "modulo":
-                filtroModuloSinFiltros = dataTable.Copy();
-                break;
-        }
-
-        RecargarFiltroGenerico(dataTable, columna, combo, listaFiltros, displayName);
-        combo.Visible = true;
-    }
-
-    private void CargarFiltroFecha()
-    {
-        using var connection = new NpgsqlConnection(cadenaConexion);
-        connection.Open();
-        using var command = new NpgsqlCommand(comandoLlenadoFiltroFecha, connection);
-        command.Parameters.AddWithValue("@FacturaLetra", FacturaLetra);
-        command.Parameters.AddWithValue("@FacturaPuntoVenta", FacturaPuntoDeVenta);
-        command.Parameters.AddWithValue("@FacturaNumero", FacturaNumero);
-
-        using var adapter = new NpgsqlDataAdapter(command);
-        DataTable dataTable = new DataTable();
-        dataTable.Columns.Add("fecha", typeof(DateTime));
-        adapter.Fill(dataTable);
-        dataTable.DefaultView.Sort = "fecha ASC";
-        DataTable dataTableString = new DataTable();
-        dataTableString.Columns.Add("fecha", typeof(string));
-        foreach (DataRow row in dataTable.Rows)
-        {
-            DateTime fecha = Convert.ToDateTime(row["fecha"]);
-            dataTableString.Rows.Add(fecha.ToString("dd/MM/yyyy"));
-        }
-        comboFiltroFecha.DataSource = dataTableString;
-        comboFiltroFecha.DisplayMember = "fecha";
-        comboFiltroFecha.ValueMember = "fecha";
-        filtroFechaSinFiltros = dataTableString;
-        tablasFiltrosFecha.Add(filtroFechaSinFiltros);
-        comboFiltroFecha.Visible = true;
-        cargaListaFecha = false;
-    }
 
     private void ConfigurarUIPorTipoFactura()
     {
@@ -1562,261 +1152,6 @@ public partial class Form1 : Form
         documentoEncontrado = false;
         //tablaAMostrar.Clear();
         tablasFiltradas.Clear();
-    }
-
-    private bool BuscarDocumentoYTipoRegistro()
-    {
-        using var connection = new NpgsqlConnection(cadenaConexion);
-        connection.Open();
-
-        // Buscar relaciones
-        bool tieneRelacion = BuscarRelaciones(connection);
-
-        button1.Visible = tieneRelacion;
-
-        // Buscar tipo de registro
-        comandoSeleccionTipoDeRegistro = ObtenerComandoSeleccionTipoDeRegistro();
-        using var command = new NpgsqlCommand(comandoSeleccionTipoDeRegistro, connection);
-        command.Parameters.AddWithValue("@letra", FacturaLetra);
-        command.Parameters.AddWithValue("@ptovta", FacturaPuntoDeVenta);
-        command.Parameters.AddWithValue("@numero", FacturaNumero);
-
-        using var adapter = new NpgsqlDataAdapter(command);
-        var ds = new DataSet();
-        adapter.Fill(ds);
-
-        if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
-        {
-            TipoRegistroFiltrado = ds.Tables[0].Rows[0][0].ToString();
-            documentoEncontrado = true;
-            return true;
-        }
-        else
-        {
-            documentoEncontrado = false;
-            return false;
-        }
-    }
-
-    private bool BuscarRelaciones(NpgsqlConnection connection)
-    {
-        string comandoBusquedaDestino = @"SELECT * FROM relaciones WHERE tipo_doc_destino = @tipo_doc_destino AND letra_destino = @letra_destino AND numero_destino = @numero_destino AND ptovta_destino = @ptovta_destino;";
-        string comandoBusquedaOrigen = @"SELECT * FROM relaciones WHERE tipo_doc_origen = @tipo_doc_destino AND letra_origen = @letra_destino AND numero_origen = @numero_destino AND ptovta_origen = @ptovta_destino;";
-
-        bool resultadoDestino = false, resultadoOrigen = false;
-
-        using (var comandoDestino = new NpgsqlCommand(comandoBusquedaDestino, connection))
-        {
-            comandoDestino.Parameters.AddWithValue("@tipo_doc_destino", FacturaTipo);
-            comandoDestino.Parameters.AddWithValue("@letra_destino", FacturaLetra);
-            comandoDestino.Parameters.AddWithValue("@ptovta_destino", FacturaPuntoDeVenta);
-            comandoDestino.Parameters.AddWithValue("@numero_destino", FacturaNumero);
-
-            using var adapter = new NpgsqlDataAdapter(comandoDestino);
-            var tablaDestino = new DataTable();
-            adapter.Fill(tablaDestino);
-            resultadoDestino = tablaDestino.Rows.Count > 0;
-        }
-
-        using (var comandoOrigen = new NpgsqlCommand(comandoBusquedaOrigen, connection))
-        {
-            comandoOrigen.Parameters.AddWithValue("@tipo_doc_destino", FacturaTipo);
-            comandoOrigen.Parameters.AddWithValue("@letra_destino", FacturaLetra);
-            comandoOrigen.Parameters.AddWithValue("@ptovta_destino", FacturaPuntoDeVenta);
-            comandoOrigen.Parameters.AddWithValue("@numero_destino", FacturaNumero);
-
-            using var adapter = new NpgsqlDataAdapter(comandoOrigen);
-            var tablaOrigen = new DataTable();
-            adapter.Fill(tablaOrigen);
-            resultadoOrigen = tablaOrigen.Rows.Count > 0;
-        }
-
-        return resultadoDestino || resultadoOrigen;
-    }
-
-    private string ObtenerComandoSeleccionTipoDeRegistro()
-    {
-        return FacturaTipo switch
-        {
-            "FC" => @"SELECT DISTINCT tiporegistro FROM amb_liquidado WHERE cob_factura_letra = @letra AND cob_factura_ptoventa = @ptovta AND cob_factura_numero = @numero;",
-            "NC" => @"SELECT DISTINCT tiporegistro FROM notadecredito WHERE letra = @letra AND ptovta = @ptovta AND numero = @numero",
-            "ND" => @"SELECT DISTINCT tiporegistro FROM notadedebito WHERE letra = @letra AND ptovta = @ptovta AND numero = @numero",
-            _ => throw new InvalidOperationException("Tipo de factura desconocido")
-        };
-    }
-
-    private void ConfigurarComandosYFiltrosPorTipoRegistro()
-    {
-        switch (TipoRegistroFiltrado)
-        {
-            case "Ambulatorios":
-                switch (FacturaTipo)
-                {
-                    case "NC":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
-                            al.carnet, al.paciente, al.codigo_cobertura AS Cobertura, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion,
-                            al.cantidad, al.total_neto, al.coseguro, al.total,
-                            al.cob_factura_tipo, al.cob_factura_letra, al.cob_factura_ptoventa, al.cob_factura_numero, al.id AS ID_Prestacion,
-                            nc.id AS id, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.importedebitado AS NC_ImporteDebitado, nc.prestacionenglobante AS NC_PrestacionEnglobante, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, nc.comentarios as NC_Comentarios,
-                            nd.motivorefactura AS ND_MotivoDeRefactura, nd.importerefactura AS ND_ImporteDeRefactura, nd.comentarios AS ND_Comentarios
-                        FROM notadecredito nc
-                        LEFT JOIN notadedebito nd ON nc.id = nd.id_notadecredito
-                        JOIN amb_liquidado al ON nc.id_prestacion = al.id
-                        WHERE nc.letra = @FacturaLetra
-                          AND nc.ptovta = @FacturaPuntoVenta
-                          AND nc.numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = @"SELECT DISTINCT al.paciente FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = @"SELECT DISTINCT al.medico FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = @"SELECT DISTINCT al.codigo FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroModulo = @"SELECT DISTINCT modulo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.modulo;";
-                        comandoLlenadoFiltroFecha = @"SELECT DISTINCT al.fecha FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.fecha;";
-                        comandoLlenadoFiltroNumeroDeinternacion = @"SELECT DISTINCT al.nro_internacion FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.nro_internacion;";
-
-                        btnNuevaNotaDeCrédito.Visible = false;
-                        btnNuevaNotaDeDébito.Visible = true;
-                        break;
-
-                    case "ND":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
-                            al.codigo, al.carnet, al.paciente, al.codigo_cobertura AS Cobertura, al.plan AS Plan, al.medico, nc1.letra AS NC_Previo_Letra, nc1.ptovta AS NC_Previo_PuntoDeVenta, nc1.numero AS NC_Previo_Numero, 
-                            nc1.fecha AS NC_Previo_Fecha, nc1.motivodedebito AS NC_Previo_MotivoDeDebito, nc1.importedebitado AS NC_Previo_ImporteDebitado, 
-                            nc1.motivoderefactura AS NC_Previo_MotivoDeRefactura, nc1.id_prestacion AS ID_Prestacion, nd.id, nd.motivorefactura, nd.importerefactura, 
-                            nd.fecha, nd.comentarios, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.diasfacturados AS NC_DiasFacturados, nc.prestacionenglobante AS NC_PrestacionEnglobante,
-                            nc.importedebitado AS NC_ImporteDebitado, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, 
-                            nc.comentarios AS NC_Comentarios 
-                        FROM notadedebito nd 
-                        RIGHT JOIN notadecredito nc1 ON nd.id_notadecredito = nc1.id 
-                        LEFT JOIN notadecredito nc 
-                        ON nd.id = nc.id_notadedebito 
-                        LEFT JOIN amb_liquidado al ON al.id = nc1.id_prestacion 
-                        WHERE nd.letra = @FacturaLetra 
-                            AND nd.ptovta = @FacturaPuntoVenta 
-                            AND nd.numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = @"SELECT DISTINCT al.paciente FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = @"SELECT DISTINCT al.medico FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = @"SELECT DISTINCT al.codigo FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroFecha = @"SELECT DISTINCT al.fecha FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.fecha";
-
-                        btnNuevaNotaDeCrédito.Visible = true;
-                        btnNuevaNotaDeDébito.Visible = false;
-                        break;
-
-                    case "FC":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
-                            al.carnet, al.paciente, al.codigo_cobertura AS Cobertura, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion, 
-                            al.cantidad, al.total_neto, al.coseguro, al.total, 
-                            al.porcentaje_especialista, al.porcentaje_ayudante1, al.porcentaje_anestesista, al.porcentaje_gastos, al.id AS ID_Prestacion,
-                            nc.fecha AS NC_Fecha, nc.letra AS NC_Letra, nc.ptovta AS NC_PuntoDeVenta, nc.numero AS NC_Numero, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.diasfacturados AS NC_DiasFacturados, nc.importedebitado AS NC_ImporteDebitado, 
-                            nc.prestacionenglobante AS NC_PrestacionEnglobante, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, nc.cargadocompletamente, nc.comentarios AS NC_Comentarios
-                        FROM amb_liquidado al
-                        LEFT JOIN notadecredito nc ON al.id = nc.id_prestacion
-                        WHERE al.cob_factura_letra = @FacturaLetra
-                          AND al.cob_factura_ptoventa = @FacturaPuntoVenta
-                          AND al.cob_factura_numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = "SELECT DISTINCT paciente FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = "SELECT DISTINCT medico FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = "SELECT DISTINCT codigo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroFecha = "SELECT DISTINCT al.fecha FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero";
-
-                        btnNuevaNotaDeCrédito.Visible = true;
-                        btnNuevaNotaDeDébito.Visible = false;
-                        break;
-                }
-                break;
-
-            case "Internados":
-                switch (FacturaTipo)
-                {
-                    case "NC":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.grupomodulo AS grupomodulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
-                            al.carnet, al.paciente,  al.codigo_cobertura AS Cobertura, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion,
-                            al.cantidad, al.total_neto, al.coseguro, al.total,
-                            al.cob_factura_tipo, al.cob_factura_letra, al.cob_factura_ptoventa, al.cob_factura_numero, al.id AS ID_Prestacion,
-                            nc.id AS id, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.importedebitado AS NC_ImporteDebitado, nc.prestacionenglobante AS NC_PrestacionEnglobante, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, nc.comentarios as NC_Comentarios,
-                            nd.motivorefactura AS ND_MotivoDeRefactura, nd.importerefactura AS ND_ImporteDeRefactura, nd.comentarios AS ND_Comentarios
-                        FROM notadecredito nc
-                        LEFT JOIN notadedebito nd ON nc.id = nd.id_notadecredito
-                        JOIN amb_liquidado al ON nc.id_prestacion = al.id
-                        WHERE nc.letra = @FacturaLetra
-                          AND nc.ptovta = @FacturaPuntoVenta
-                          AND nc.numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = @"SELECT DISTINCT al.paciente FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = @"SELECT DISTINCT al.medico FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = @"SELECT DISTINCT al.codigo FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroModulo = @"SELECT DISTINCT modulo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.modulo;";
-                        comandoLlenadoFiltroFecha = @"SELECT DISTINCT al.fecha FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.fecha;";
-                        comandoLlenadoFiltroNumeroDeinternacion = @"SELECT DISTINCT al.nro_internacion FROM amb_liquidado al JOIN notadecredito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.nro_internacion;";
-
-                        btnNuevaNotaDeCrédito.Visible = false;
-                        btnNuevaNotaDeDébito.Visible = true;
-                        break;
-
-                    case "ND":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.grupomodulo AS grupomodulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso,  
-                            al.carnet, al.paciente, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad,  al.total_neto, al.coseguro, al.total,
-                            al.codigo_cobertura AS Cobertura,
-                            nc1.letra AS NC_Previo_Letra, nc1.ptovta AS NC_Previo_PuntoDeVenta, nc1.numero AS NC_Previo_Numero, 
-                            nc1.fecha AS NC_Previo_Fecha, nc1.motivodedebito AS NC_Previo_MotivoDeDebito, nc1.importedebitado AS NC_Previo_ImporteDebitado, 
-                            nc1.motivoderefactura AS NC_Previo_MotivoDeRefactura, nc1.id_prestacion AS ID_Prestacion, nd.id, nd.motivorefactura, nd.importerefactura, 
-                            nd.comentarios, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.diasfacturados AS NC_DiasFacturados, nc.prestacionenglobante AS NC_PrestacionEnglobante,
-                            nc.importedebitado AS NC_ImporteDebitado, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, 
-                            nc.comentarios AS NC_Comentarios 
-                        FROM notadedebito nd 
-                        RIGHT JOIN notadecredito nc1 ON nd.id_notadecredito = nc1.id 
-                        LEFT JOIN notadecredito nc 
-                        ON nd.id = nc.id_notadedebito 
-                        LEFT JOIN amb_liquidado al ON al.id = nc1.id_prestacion 
-                        WHERE nd.letra = @FacturaLetra 
-                            AND nd.ptovta = @FacturaPuntoVenta 
-                            AND nd.numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = @"SELECT DISTINCT al.paciente FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = @"SELECT DISTINCT al.medico FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = @"SELECT DISTINCT al.codigo FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroModulo = @"SELECT DISTINCT modulo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.modulo;";
-                        comandoLlenadoFiltroFecha = @"SELECT DISTINCT al.fecha FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.fecha";
-                        comandoLlenadoFiltroNumeroDeinternacion = @"SELECT DISTINCT al.nro_internacion FROM amb_liquidado al JOIN notadedebito nc ON al.id = nc.id_prestacion WHERE nc.letra = @FacturaLetra AND nc.ptovta = @FacturaPuntoVenta AND nc.numero = @FacturaNumero ORDER BY al.nro_internacion;";
-
-                        btnNuevaNotaDeCrédito.Visible = true;
-                        btnNuevaNotaDeDébito.Visible = false;
-                        break;
-
-                    case "FC":
-                        comandoSeleccionAmbLiquidado = @"
-                        SELECT al.modulo AS modulo, al.grupomodulo AS grupomodulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
-                            al.carnet, al.paciente, al.codigo_cobertura AS Cobertura, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion, 
-                            al.cantidad, al.total_neto, al.coseguro, al.total, 
-                            al.porcentaje_especialista, al.porcentaje_ayudante1, al.porcentaje_anestesista, al.porcentaje_gastos, al.id AS ID_Prestacion,
-                            nc.fecha AS NC_Fecha, nc.letra AS NC_Letra, nc.ptovta AS NC_PuntoDeVenta, nc.numero AS NC_Numero, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.diasfacturados AS NC_DiasFacturados, nc.importedebitado AS NC_ImporteDebitado, 
-                            nc.prestacionenglobante AS NC_PrestacionEnglobante, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, nc.cargadocompletamente, nc.comentarios AS NC_Comentarios
-                        FROM amb_liquidado al
-                        LEFT JOIN notadecredito nc ON al.id = nc.id_prestacion
-                        WHERE al.cob_factura_letra = @FacturaLetra
-                          AND al.cob_factura_ptoventa = @FacturaPuntoVenta
-                          AND al.cob_factura_numero = @FacturaNumero;";
-
-                        comandoLlenadoFiltroPaciente = "SELECT DISTINCT paciente FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.paciente;";
-                        comandoLlenadoFiltroProfesional = "SELECT DISTINCT medico FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.medico;";
-                        comandoLlenadoFiltroPrestacion = "SELECT DISTINCT codigo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.codigo;";
-                        comandoLlenadoFiltroModulo = "SELECT DISTINCT modulo FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero ORDER BY al.modulo;";
-                        comandoLlenadoFiltroFecha = "SELECT DISTINCT al.fecha FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero";
-                        comandoLlenadoFiltroNumeroDeinternacion = @"SELECT DISTINCT al.nro_internacion FROM amb_liquidado al WHERE al.cob_factura_letra = @FacturaLetra AND al.cob_factura_ptoventa = @FacturaPuntoVenta AND al.cob_factura_numero = @FacturaNumero;";
-
-                        btnNuevaNotaDeCrédito.Visible = true;
-                        btnNuevaNotaDeDébito.Visible = false;
-                        break;
-                }
-                break;
-        }
     }
 
 
@@ -3045,7 +2380,7 @@ public partial class Form1 : Form
     private void LimpiarAuxiliarNotaDeCredito()
     {
         string queryDelete = "DELETE FROM auxnc";
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
         using var comando = new NpgsqlCommand(queryDelete, connection);
         comando.ExecuteNonQuery();
@@ -3057,7 +2392,7 @@ public partial class Form1 : Form
         (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro) 
         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @comentarios, @tiporegistro);";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
         foreach (var item in listaValoresParaBorradoDeFiltros)
         {
@@ -3083,7 +2418,7 @@ public partial class Form1 : Form
         (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, id_notadedebito, comentarios, tiporegistro) 
         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @id_notadedebito, @comentarios, @tiporegistro);";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
         foreach (var item in listaValoresParaBorradoDeFiltrosND)
         {
@@ -3127,7 +2462,7 @@ public partial class Form1 : Form
     private void LimpiarAuxiliarNotaDeDebito()
     {
         string queryDelete = "DELETE FROM auxnd";
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
         using var comando = new NpgsqlCommand(queryDelete, connection);
         comando.ExecuteNonQuery();
@@ -3139,7 +2474,7 @@ public partial class Form1 : Form
         (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, comentarios, tiporegistro) 
         VALUES (@id_notadecredito, @motivorefactura, @importerefactura, @codigo, @usuario, @id_prestacion, @comentarios, @tiporegistro);";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
 
         foreach (var item in listaValoresParaBorradoDeFiltrosNC)
@@ -3326,44 +2661,7 @@ public partial class Form1 : Form
 
     private void btnBuscar_Click(object sender, EventArgs e)
     {
-        buscando = true;
-        SetControlesVisibles(false);
-        tablaAMostrar = new DataTable(); // Nueva instancia para cada búsqueda
-        dataGridView1.DataSource = null;
-        dataGridView1.Columns.Clear();
-
-        PrepararBusqueda();
-
-        bool encontrado = BuscarDocumentoYTipoRegistro();
-
-        if (encontrado)
-        {
-            algunFiltro = false;
-            ConfigurarComandosYFiltrosPorTipoRegistro();
-            CargarDatosDocumento();
-            CargarFiltros();
-            ConfigurarUIPorTipoFactura();
-            GuardarValoresParaActualizarMontoDeRefactura();
-            GuardarValoresParaActualizarMontoAuditados();
-            SetControlesVisibles(true);
-
-            filtroPacienteOriginal = filtroPacienteSinFiltros.Copy();
-            filtroPrestacionOriginal = filtroPrestacionSinFiltros.Copy();
-            filtroMedicoOriginal = filtroMedicoSinFiltros.Copy();
-            filtroModuloOriginal = filtroModuloSinFiltros.Copy();
-            filtroNumeroDeInternacionOriginal = filtroNumeroDeInternacionSinFiltros.Copy();
-            filtroFechaOriginal = filtroFechaSinFiltros.Copy();
-            cargaLista = true;
-            debitoIndividual = true;
-        }
-        else
-        {
-            ManejarDocumentoNoEncontrado();
-        }
-        cargaPrimeraVez = false;
-        buscando = false;
-        habilitarFiltros();
-
+        BuscarDocumentoEvent?.Invoke(this, EventArgs.Empty);
     }
 
     private void dataGridView1_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
@@ -3404,7 +2702,7 @@ public partial class Form1 : Form
         string queryInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, cargadocompletamente, comentarios, tiporegistro) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @cargadocompletamente, @comentarios, @tiporegistro)";
         string queryUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasFacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, prestacionenglobante = @prestacionenglobante, usuario = @usuario, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargadocompletamente;";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
 
         foreach (var item in listaValoresParaBorradoDeFiltros)
@@ -3429,7 +2727,7 @@ public partial class Form1 : Form
         string queryInsert = @"INSERT INTO notadedebito (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, cargadocompletamente, comentarios, tiporegistro) VALUES (@id_notadecredito, @motivoderefactura, @importederefactura, @codigo, @usuario, @id_prestacion, @cargadocompletamente, @comentarios, @tiporegistro);";
         string queryUpdate = @"UPDATE notadedebito SET motivorefactura = @motivoderefactura, importerefactura = @importederefactura, usuario = @usuario, codigo = @codigo, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargadocompletamente;";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
 
         foreach (var item in listaValoresParaBorradoDeFiltrosNC)
@@ -3453,7 +2751,7 @@ public partial class Form1 : Form
         string queryInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, cargadocompletamente, id_notadedebito, comentarios) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @cargadocompletamente, @id_notadedebito, @comentarios)";
         string queryUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, usuario = @usuario, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND id_notadedebito = @id_notadedebito;";
 
-        using var connection = new NpgsqlConnection(cadenaConexion);
+        using var connection = new NpgsqlConnection(connectionString);
         connection.Open();
 
         foreach (var item in listaValoresParaBorradoDeFiltrosND)
@@ -3641,134 +2939,16 @@ public partial class Form1 : Form
         resetearVariables();
     }
 
-    /*private void dataGridView1_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-    {
-
-        switch (FacturaTipo)
-        {
-            case "FC":
-                colorearColumnasFC();
-                break;
-            case "NC":
-                colorearColumnasNC();
-                break;
-            case "ND":
-                colorearColumnasND();
-                break;
-        }
-    }*/
-
-    private void recargarFiltroFecha(DataTable dtPacientesFiltrados)
-    {
-        HashSet<string> fechasUnicas = new HashSet<string>();
-
-        foreach (DataRow fila in dtPacientesFiltrados.Rows)
-        {
-            if (!fila.IsNull("Fecha"))
-            {
-                string fecha = Convert.ToDateTime(fila["Fecha"]).ToString("yyyy-MM-dd"); // Formato de fecha
-                fechasUnicas.Add(fecha);
-            }
-        }
-
-        // Llenar el ComboBox con las fechas disponibles
-        cargaListaFecha = true;
-        comboFiltroFecha.DataSource = fechasUnicas.ToList();
-        comboFiltroFecha.SelectedIndex = -1; // Ninguna fecha seleccionada al inicio
-    }
-
     // Evento cuando el usuario selecciona una fecha en el ComboBox
 
     private void comboFiltroFecha_SelectedIndexChanged(object sender, EventArgs e)
     {
-        algunFiltro = true;
-        if (cargaListaFecha) return;
-        if (buscando) return;
-        if (comboFiltroFecha.SelectedIndex == -1) return; // Evita ejecutar si no se ha seleccionado nada
-
+        if (cargaListaFecha || buscando || comboFiltroFecha.SelectedIndex <= 0) return;
         GuardarValoresAntesDeDeshacerFiltro();
-
-        string fechaSeleccionada = comboFiltroFecha.SelectedValue.ToString(); // Asumimos que es un DateTime
-
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
-
-        DataRow[] filasFiltradas = dataTableActual.Select($"fecha = '{fechaSeleccionada}'");
-
-        // Crear un nuevo DataTable con las filas filtradas
-        DataTable dtPacientesFiltrados = dataTableActual.Clone();
-        foreach (DataRow fila in filasFiltradas)
-        {
-            dtPacientesFiltrados.ImportRow(fila);
-        }
-
-        lblFecSel.Text = "Fecha: " + fechaSeleccionada;
-        btnBorrarFiltros.Visible = true;
+        lblFecSel.Text = "Fecha: " + comboFiltroFecha.Text;
         lblFecSel.Visible = true;
-
-        // Asegurar consistencia en la estructura antes de actualizar el DataGridView
-        dataGridView1.DataSource = null;
-        dataGridView1.Columns.Clear(); // Evita posibles conflictos con columnas anteriores
-        tablaAMostrar = dtPacientesFiltrados;
-
-        // Recargar filtros
-        RecargarFiltroGenerico(dtPacientesFiltrados, "medico", filtroProfesional, tablasFiltrosMedico, "Profesional");
-        RecargarFiltroGenerico(dtPacientesFiltrados, "codigo", filtroPrestacion, tablasFiltrosPrestacion, "Prestación");
-        RecargarFiltroGenerico(dtPacientesFiltrados, "paciente", filtroPaciente, tablasFiltrosPaciente, "Paciente");
-        if (TipoRegistroFiltrado == "Internados")
-        {
-            RecargarFiltroGenerico(dtPacientesFiltrados, "Nro_Int", filtroNumeroDeInternacion, tablasFiltrosNumeroDeInternacion, "nro_internacion");
-            RecargarFiltroGenerico(dtPacientesFiltrados, "modulo", filtroModulo, tablasFiltrosModulo, "modulo");
-        }
-
-
-        // Asignar la nueva fuente de datos
-        dataGridView1.DataSource = dtPacientesFiltrados;
-        dataGridView1.Refresh(); // Asegurar que la vista se actualice correctamente
-
-        auxFiltros = dtPacientesFiltrados;
-
-        tablasFiltradas.Add(dtPacientesFiltrados);
-        tablasFiltrosFecha.Add(dtPacientesFiltrados);
-
-        // Aplicar configuraciones según el tipo de factura
-        switch (FacturaTipo)
-        {
-            case "FC":
-                colorearColumnasFC();
-                evaluarPrestacionEnglobante();
-                filtroMotivoDebito.Visible = true;
-                checkMotivoDebito.Visible = true;
-                label6.Visible = true;
-                break;
-
-            case "NC":
-                colorearColumnasNC();
-                filtroMotivoDebito.Visible = false;
-                checkMotivoDebito.Visible = false;
-                label6.Visible = false;
-                break;
-
-            case "ND":
-                colorearColumnasND();
-                filtroMotivoDebito.Visible = true;
-                checkMotivoDebito.Visible = true;
-                label6.Visible = true;
-                break;
-        }
-
-        lblCantidadDeRegistrosFiltrados.Text = ("Cantidad de registros filtrados: " + dtPacientesFiltrados.Rows.Count);
-
-        cargaListaFecha = false;
         comboFiltroFecha.Visible = false;
-        // Recargar los combos de filtros con los valores posibles tras el filtro
-        ActualizarFiltrosDisponibles(dtPacientesFiltrados.DefaultView.ToTable());
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
+        AplicarFiltrosActivos();
     }
 
     // Método para guardar los valores antes de ordenar
@@ -4246,53 +3426,12 @@ public partial class Form1 : Form
 
     private void filtroNumeroDeInternacion_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaListaNumeroDeInternacion)
-        {
-            FiltrarPorNumeroDeInternacion();
-        }
-        cargaListaNumeroDeInternacion = false;
-    }
-
-    private void FiltrarPorNumeroDeInternacion()
-    {
-        algunFiltro = true;
+        if (cargaListaNumeroDeInternacion || filtroNumeroDeInternacion.SelectedIndex <= 0) return;
         GuardarValoresAntesDeDeshacerFiltro();
-        btnBorrarFiltros.Visible = true;
-
-        string numeroDeInternacionSeleccionado = filtroNumeroDeInternacion.Text.Replace("'", "''");
-
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        if (dataTableActual == null) return;
-
-        // Determinar el nombre correcto de la columna
-        string colNroInternacion = dataTableActual.Columns.Contains("nro_internacion") ? "nro_internacion" :
-                                  dataTableActual.Columns.Contains("nro_int") ? "nro_int" : null;
-        if (colNroInternacion == null) return;
-
-        DataRow[] filasFiltradas = dataTableActual.Select($"{colNroInternacion} = '{numeroDeInternacionSeleccionado}'");
-        DataTable dataTableFiltrado = dataTableActual.Clone();
-        foreach (DataRow fila in filasFiltradas)
-            dataTableFiltrado.ImportRow(fila);
-
-        dataGridView1.DataSource = dataTableFiltrado;
-        tablaSinFiltro = dataTableFiltrado;
-        auxFiltros = dataTableFiltrado;
-
-        filtroNumeroDeInternacion.Visible = false;
-        lblNumeroDeInternacionSel.Text = "Número de internación: " + numeroDeInternacionSeleccionado;
+        lblNumeroDeInternacionSel.Text = "Número de internación: " + filtroNumeroDeInternacion.Text;
         lblNumeroDeInternacionSel.Visible = true;
-
-        ordenFiltros.Add("Número de internación");
-
-        AplicarFormatoYVisibilidadPorTipoFactura(dataTableFiltrado.Rows.Count);
-        ActualizarFiltrosDisponibles(dataTableFiltrado);
-        habilitarFiltros();
-        restaurarValoresPreviosAFiltro();
-        contarFilasConDebitoAceptado();
+        filtroNumeroDeInternacion.Visible = false;
+        AplicarFiltrosActivos();
     }
 
     private void button1_Click(object sender, EventArgs e)
@@ -4456,7 +3595,10 @@ public partial class Form1 : Form
     private void RecargarFiltroGenerico(DataTable dtFiltrado, string columna, ComboBox combo, List<DataTable> listaFiltros, string displayName)
     {
         var dtUnico = new DataTable();
-        dtUnico.Columns.Add(columna);
+        dtUnico.Columns.Add(columna, typeof(string));
+
+        // Agregamos el texto por defecto para que sea el índice 0 (placeholder)
+        dtUnico.Rows.Add(displayName);
 
         var valoresUnicos = new HashSet<string>();
         foreach (DataRow fila in dtFiltrado.Rows)
@@ -4464,43 +3606,35 @@ public partial class Form1 : Form
             if (!fila.IsNull(columna))
             {
                 string valor = fila[columna].ToString();
-                valoresUnicos.Add(valor);
+                if (!string.IsNullOrWhiteSpace(valor))
+                    valoresUnicos.Add(valor);
             }
         }
 
-        // Ordenar alfabéticamente antes de agregar al DataTable
         foreach (var valor in valoresUnicos.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase))
         {
             dtUnico.Rows.Add(valor);
         }
 
         listaFiltros.Add(dtUnico);
-        evitarErrores(displayName);
+        evitarErrores(columna);
         combo.DataSource = dtUnico;
-        evitarErrores(displayName);
+        evitarErrores(columna);
         combo.DisplayMember = columna;
         combo.ValueMember = columna;
+        combo.SelectedIndex = 0; // Seleccionar el placeholder por defecto
     }
 
-    private void evitarErrores(string displayName)
+    private void evitarErrores(string nombreColumna)
     {
-        switch (displayName)
+        switch (nombreColumna.ToLower())
         {
-            case "Paciente":
-                cargaListaPaciente = true;
-                break;
+            case "paciente": cargaListaPaciente = true; break;
             case "nro_internacion":
-                cargaListaNumeroDeInternacion = true;
-                break;
-            case "Profesional":
-                cargaListaProfesional = true;
-                break;
-            case "Prestación":
-                cargaListaPrestacion = true;
-                break;
-            case "modulo":
-                cargaListaModulo = true;
-                break;
+            case "nro_int": cargaListaNumeroDeInternacion = true; break;
+            case "medico": cargaListaProfesional = true; break;
+            case "codigo": cargaListaPrestacion = true; break;
+            case "modulo": cargaListaModulo = true; break;
         }
     }
 
@@ -4537,71 +3671,47 @@ public partial class Form1 : Form
 
     private void ActualizarFiltrosDisponibles(DataTable dataTableFiltrada)
     {
-        // Filtros estándar
+        // Limpiamos listas para evitar acumulación
+        tablasFiltrosPaciente.Clear();
+        tablasFiltrosPrestacion.Clear();
+        tablasFiltrosMedico.Clear();
+        tablasFiltrosModulo.Clear();
+        tablasFiltrosNumeroDeInternacion.Clear();
+        tablasFiltrosFecha.Clear();
+
         RecargarFiltroGenerico(dataTableFiltrada, "paciente", filtroPaciente, tablasFiltrosPaciente, "Paciente");
         RecargarFiltroGenerico(dataTableFiltrada, "codigo", filtroPrestacion, tablasFiltrosPrestacion, "Prestación");
         RecargarFiltroGenerico(dataTableFiltrada, "medico", filtroProfesional, tablasFiltrosMedico, "Profesional");
-        RecargarFiltroGenerico(dataTableFiltrada, "modulo", filtroModulo, tablasFiltrosModulo, "modulo");
 
-        // Filtro de número de internación (unifica nombre de columna)
-        string colNroInternacion = null;
-        if (dataTableFiltrada.Columns.Contains("nro_internacion"))
-            colNroInternacion = "nro_internacion";
-        else if (dataTableFiltrada.Columns.Contains("nro_int"))
-            colNroInternacion = "nro_int";
+        if (dataTableFiltrada.Columns.Contains("modulo"))
+            RecargarFiltroGenerico(dataTableFiltrada, "modulo", filtroModulo, tablasFiltrosModulo, "Módulo");
 
+        string colNroInternacion = dataTableFiltrada.Columns.Contains("nro_internacion") ? "nro_internacion" :
+                                   dataTableFiltrada.Columns.Contains("nro_int") ? "nro_int" : null;
         if (colNroInternacion != null)
-        {
-            var numerosUnicos = new HashSet<string>();
-            foreach (DataRow fila in dataTableFiltrada.Rows)
-            {
-                if (!fila.IsNull(colNroInternacion))
-                {
-                    string nro = fila[colNroInternacion].ToString();
-                    numerosUnicos.Add(nro);
-                }
-            }
-            DataTable dtNroInt = new DataTable();
-            dtNroInt.Columns.Add("nro_internacion", typeof(string));
-            foreach (var nro in numerosUnicos)
-                dtNroInt.Rows.Add(nro);
+            RecargarFiltroGenerico(dataTableFiltrada, colNroInternacion, filtroNumeroDeInternacion, tablasFiltrosNumeroDeInternacion, "N° de internación");
 
-            cargaListaNumeroDeInternacion = true;
-            filtroNumeroDeInternacion.DataSource = dtNroInt;
-            cargaListaNumeroDeInternacion = true;
-            filtroNumeroDeInternacion.DisplayMember = "nro_internacion";
-            cargaListaNumeroDeInternacion = true;
-            filtroNumeroDeInternacion.ValueMember = "nro_internacion";
-            cargaListaNumeroDeInternacion = true;
-            filtroNumeroDeInternacion.SelectedIndex = -1;
-            cargaListaNumeroDeInternacion = false;
-        }
-
-        // Filtro de fecha (siempre como DataTable con columna "fecha" string)
         if (dataTableFiltrada.Columns.Contains("fecha"))
         {
+            var dtUnico = new DataTable();
+            dtUnico.Columns.Add("fecha", typeof(string));
+            dtUnico.Rows.Add("Fecha");
+
             var fechasUnicas = new HashSet<string>();
             foreach (DataRow fila in dataTableFiltrada.Rows)
             {
                 if (!fila.IsNull("fecha"))
-                {
-                    string fecha = Convert.ToDateTime(fila["fecha"]).ToString("dd/MM/yyyy");
-                    fechasUnicas.Add(fecha);
-                }
+                    fechasUnicas.Add(Convert.ToDateTime(fila["fecha"]).ToString("dd/MM/yyyy"));
             }
-            DataTable dtFechas = new DataTable();
-            dtFechas.Columns.Add("fecha", typeof(string));
-            foreach (var fecha in fechasUnicas)
-                dtFechas.Rows.Add(fecha);
+            foreach (var fecha in fechasUnicas.OrderBy(x => x))
+                dtUnico.Rows.Add(fecha);
 
+            tablasFiltrosFecha.Add(dtUnico);
             cargaListaFecha = true;
-            comboFiltroFecha.DataSource = dtFechas;
-            cargaListaFecha = true;
+            comboFiltroFecha.DataSource = dtUnico;
             comboFiltroFecha.DisplayMember = "fecha";
-            cargaListaFecha = true;
             comboFiltroFecha.ValueMember = "fecha";
-            cargaListaFecha = true;
-            comboFiltroFecha.SelectedIndex = -1;
+            comboFiltroFecha.SelectedIndex = 0;
             cargaListaFecha = false;
         }
     }

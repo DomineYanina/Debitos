@@ -1,4 +1,4 @@
 # Ignorar el archivo específico que causa el error
 .vs/Debitos/FileContentIndex/19189495-9f49-44d8-9102-7d0a30b47d1b.vsidx
-bin/
-obj/
+Obj/
+Bin/
