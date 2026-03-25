@@ -1,0 +1,116 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|c:\\users\\yanina.domine\\desktop\\aplicaciones creadas\\d\u00E9bitos\\debitos\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|solutionrelative:form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|c:\\users\\yanina.domine\\desktop\\aplicaciones creadas\\d\u00E9bitos\\debitos\\form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "RelativeMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|solutionrelative:form1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|c:\\users\\yanina.domine\\desktop\\aplicaciones creadas\\d\u00E9bitos\\debitos\\form2.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|solutionrelative:form2.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|c:\\users\\yanina.domine\\desktop\\aplicaciones creadas\\d\u00E9bitos\\debitos\\datagridviewcolumnconfig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|solutionrelative:datagridviewcolumnconfig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|c:\\users\\yanina.domine\\desktop\\aplicaciones creadas\\d\u00E9bitos\\debitos\\form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{F05F8558-29E6-4F70-9607-4F746B80AF95}|Debitos.csproj|solutionrelative:form1.designer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 3,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Form1.cs",
+              "DocumentMoniker": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.cs",
+              "RelativeDocumentMoniker": "Form1.cs",
+              "ToolTip": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.cs",
+              "RelativeToolTip": "Form1.cs",
+              "ViewState": "AgIAAGEPAAAAAAAAAAAEwLoPAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-07-16T12:07:26.224Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "DataGridViewColumnConfig.cs",
+              "DocumentMoniker": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\DataGridViewColumnConfig.cs",
+              "RelativeDocumentMoniker": "DataGridViewColumnConfig.cs",
+              "ToolTip": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\DataGridViewColumnConfig.cs",
+              "RelativeToolTip": "DataGridViewColumnConfig.cs",
+              "ViewState": "AgIAAGIAAAAAAAAAAAAuwHMAAAA7AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-02T19:52:02.375Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Form2.cs",
+              "DocumentMoniker": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form2.cs",
+              "RelativeDocumentMoniker": "Form2.cs",
+              "ToolTip": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form2.cs",
+              "RelativeToolTip": "Form2.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-07-29T19:24:58.927Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Form1.Designer.cs",
+              "DocumentMoniker": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.Designer.cs",
+              "RelativeDocumentMoniker": "Form1.Designer.cs",
+              "ToolTip": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.Designer.cs",
+              "RelativeToolTip": "Form1.Designer.cs",
+              "ViewState": "AgIAABkAAAAAAAAAAAAlwBkAAAAIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-07-24T18:47:21.943Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Form1.cs [Dise\u00F1o]",
+              "DocumentMoniker": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.cs",
+              "RelativeDocumentMoniker": "Form1.cs",
+              "ToolTip": "C:\\Users\\yanina.domine\\Desktop\\Aplicaciones creadas\\D\u00E9bitos\\Debitos\\Form1.cs [Dise\u00F1o]",
+              "RelativeToolTip": "Form1.cs [Dise\u00F1o]",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-07-31T16:44:46.274Z",
+              "EditorCaption": " [Dise\u00F1o]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

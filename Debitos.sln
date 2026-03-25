@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34928.147
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Debitos", "Debitos.csproj", "{F05F8558-29E6-4F70-9607-4F746B80AF95}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup", "..\Setup\Setup.vdproj", "{604DB926-33FA-40F5-A84F-360BD49A8EA3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F05F8558-29E6-4F70-9607-4F746B80AF95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F05F8558-29E6-4F70-9607-4F746B80AF95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F05F8558-29E6-4F70-9607-4F746B80AF95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F05F8558-29E6-4F70-9607-4F746B80AF95}.Release|Any CPU.Build.0 = Release|Any CPU
+		{604DB926-33FA-40F5-A84F-360BD49A8EA3}.Debug|Any CPU.ActiveCfg = Debug
+		{604DB926-33FA-40F5-A84F-360BD49A8EA3}.Release|Any CPU.ActiveCfg = Release
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6D37DAB4-C705-41B9-81B1-8154E18CEB91}
+	EndGlobalSection
+EndGlobal
