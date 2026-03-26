@@ -149,6 +149,7 @@ namespace Debitos
             lblNumeroDeInternacionSel.Size = new Size(100, 15);
             lblNumeroDeInternacionSel.TabIndex = 47;
             lblNumeroDeInternacionSel.Text = "N° de internación";
+            lblNumeroDeInternacionSel.Click += lblNumeroDeInternacionSel_Click;
             // 
             // filtroNumeroDeInternacion
             // 
@@ -181,6 +182,7 @@ namespace Debitos
             lblFecSel.Size = new Size(38, 15);
             lblFecSel.TabIndex = 44;
             lblFecSel.Text = "Fecha";
+            lblFecSel.Click += lblFecSel_Click;
             // 
             // lblPrestSel
             // 
@@ -191,6 +193,7 @@ namespace Debitos
             lblPrestSel.Size = new Size(62, 15);
             lblPrestSel.TabIndex = 42;
             lblPrestSel.Text = "Prestación";
+            lblPrestSel.Click += lblPrestSel_Click;
             // 
             // lblProfSel
             // 
@@ -201,6 +204,7 @@ namespace Debitos
             lblProfSel.Size = new Size(66, 15);
             lblProfSel.TabIndex = 41;
             lblProfSel.Text = "Profesional";
+            lblProfSel.Click += lblProfSel_Click;
             // 
             // lblPacSel
             // 
@@ -211,6 +215,7 @@ namespace Debitos
             lblPacSel.Size = new Size(52, 15);
             lblPacSel.TabIndex = 40;
             lblPacSel.Text = "Paciente";
+            lblPacSel.Click += lblPacSel_Click;
             // 
             // btnBuscar
             // 

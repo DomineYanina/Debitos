@@ -487,7 +487,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void InicializarFiltrosDesdeMemoria(DataTable datos)
     {
-        ActualizarFiltrosDisponibles(datos);
+        ActualizarFiltrosDisponibles(datos.DefaultView);
 
         filtroPacienteOriginal = (DataTable)filtroPaciente.DataSource;
         filtroPrestacionOriginal = (DataTable)filtroPrestacion.DataSource;
@@ -779,7 +779,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         DataView vistaFiltrada = new DataView(dt);
         vistaFiltrada.RowFilter = filtroFinal;
-        ActualizarFiltrosDisponibles(vistaFiltrada.ToTable());
+        ActualizarFiltrosDisponibles(vistaFiltrada);
 
         cargaListaPaciente = false;
         cargaListaProfesional = false;
@@ -3129,6 +3129,59 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
     }
 
+    private void lblPacSel_Click(object sender, EventArgs e)
+    {
+        lblPacSel.Visible = false;
+        filtroPaciente.Visible = true;
+        filtroPaciente.SelectedIndex = 0;
+        AplicarFiltrosActivos();
+    }
+
+    private void lblProfSel_Click(object sender, EventArgs e)
+    {
+        lblProfSel.Visible = false;
+        filtroProfesional.Visible = true;
+        filtroProfesional.SelectedIndex = 0;
+        AplicarFiltrosActivos();
+    }
+
+    private void lblPrestSel_Click(object sender, EventArgs e)
+    {
+        lblPrestSel.Visible = false;
+        filtroPrestacion.Visible = true;
+        filtroPrestacion.SelectedIndex = 0;
+        AplicarFiltrosActivos();
+    }
+
+    private void lblModulo_Click(object sender, EventArgs e)
+    {
+        // Como usás este label para el título y para el valor filtrado, verificamos el texto:
+        if (lblModulo.Text.StartsWith("Módulo:"))
+        {
+            lblModulo.Text = "Módulo";
+            lblModulo.TextAlign = ContentAlignment.TopLeft;
+            filtroModulo.Visible = true;
+            filtroModulo.SelectedIndex = 0;
+            AplicarFiltrosActivos();
+        }
+    }
+
+    private void lblNumeroDeInternacionSel_Click(object sender, EventArgs e)
+    {
+        lblNumeroDeInternacionSel.Visible = false;
+        filtroNumeroDeInternacion.Visible = true;
+        filtroNumeroDeInternacion.SelectedIndex = 0;
+        AplicarFiltrosActivos();
+    }
+
+    private void lblFecSel_Click(object sender, EventArgs e)
+    {
+        lblFecSel.Visible = false;
+        comboFiltroFecha.Visible = true;
+        comboFiltroFecha.SelectedIndex = 0;
+        AplicarFiltrosActivos();
+    }
+
     private void GuardarValoresAntesDeDeshacerFiltroNC()
     {
         // Obtener el DataTable subyacente del DataGridView.
@@ -3485,10 +3538,13 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         filtroPaciente.Visible = visible;
         filtroProfesional.Visible = visible;
         filtroNumeroDeInternacion.Visible = visible;
+
         if (TipoRegistroFiltrado == "Ambulatorios")
             filtroNumeroDeInternacion.Visible = false;
+
         filtroPrestacion.Visible = visible;
         filtroMotivoDeRefactura.Visible = visible;
+
         if (visible)
         {
             if (FacturaTipo == "NC")
@@ -3525,12 +3581,17 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         lblCantidadDeRegistrosFiltrados.Visible = visible;
         filtroModulo.Visible = visible;
+
         if (TipoRegistroFiltrado == "Ambulatorios")
             filtroModulo.Visible = false;
+
         button1.Visible = visible;
         label2.Visible = visible;
         comboFiltroFecha.Visible = visible;
-        lblFecSel.Visible = visible;
+
+        // CORRECCIÓN: La etiqueta de fecha seleccionada arranca oculta
+        lblFecSel.Visible = false;
+
         checkMotivoDeRefactura.Visible = visible;
         btnExportar.Visible = visible;
         btnBorrarCelda.Visible = visible;
@@ -3543,35 +3604,34 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         btnBorrarImporteDebito.Visible = visible;
         btnBorrarImporteRefactura.Visible = visible;
         lblCantidadDeRegistrosConDebitoAceptado.Visible = visible;
-        lblPacSel.Visible = visible;
-        lblPrestSel.Visible = visible;
-        lblProfSel.Visible = visible;
-        lblNumeroDeInternacionSel.Visible = visible;
+
+        // CORRECCIÓN: Todas las etiquetas de los filtros arrancan ocultas
+        lblPacSel.Visible = false;
+        lblPrestSel.Visible = false;
+        lblProfSel.Visible = false;
+        lblNumeroDeInternacionSel.Visible = false;
+
         panel1.Visible = visible;
         if (TipoRegistroFiltrado == "Ambulatorios")
             panel1.Visible = false;
-        if (TipoRegistroFiltrado == "Ambulatorios")
-            lblNumeroDeInternacionSel.Visible = false;
+
         lblModulo.Visible = visible;
         if (TipoRegistroFiltrado == "Ambulatorios")
             lblModulo.Visible = false;
-
     }
 
-    private void RecargarFiltroGenerico(DataTable dtFiltrado, string columna, ComboBox combo, List<DataTable> listaFiltros, string displayName)
+    private void RecargarFiltroGenerico(DataView vistaFiltrada, string columna, ComboBox combo, List<DataTable> listaFiltros, string displayName)
     {
         var dtUnico = new DataTable();
         dtUnico.Columns.Add(columna, typeof(string));
-
-        // Agregamos el texto por defecto para que sea el índice 0 (placeholder)
         dtUnico.Rows.Add(displayName);
 
         var valoresUnicos = new HashSet<string>();
-        foreach (DataRow fila in dtFiltrado.Rows)
+        foreach (DataRowView rowView in vistaFiltrada)
         {
-            if (!fila.IsNull(columna))
+            if (rowView.Row[columna] != DBNull.Value)
             {
-                string valor = fila[columna].ToString();
+                string valor = rowView.Row[columna].ToString();
                 if (!string.IsNullOrWhiteSpace(valor))
                     valoresUnicos.Add(valor);
             }
@@ -3583,12 +3643,28 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
 
         listaFiltros.Add(dtUnico);
-        evitarErrores(columna);
+
+        // Bloqueamos el evento, bindeamos, y liberamos inmediatamente
+        SetFlagFiltro(columna, true);
         combo.DataSource = dtUnico;
-        evitarErrores(columna);
         combo.DisplayMember = columna;
         combo.ValueMember = columna;
-        combo.SelectedIndex = 0; // Seleccionar el placeholder por defecto
+        combo.SelectedIndex = 0;
+        SetFlagFiltro(columna, false);
+    }
+
+    private void SetFlagFiltro(string nombreColumna, bool estado)
+    {
+        switch (nombreColumna.ToLower())
+        {
+            case "paciente": cargaListaPaciente = estado; break;
+            case "nro_internacion":
+            case "nro_int": cargaListaNumeroDeInternacion = estado; break;
+            case "medico": cargaListaProfesional = estado; break;
+            case "codigo": cargaListaPrestacion = estado; break;
+            case "modulo": cargaListaModulo = estado; break;
+            case "fecha": cargaListaFecha = estado; break;
+        }
     }
 
     private void evitarErrores(string nombreColumna)
@@ -3634,10 +3710,8 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             return false;
         }
     }
-
-    private void ActualizarFiltrosDisponibles(DataTable dataTableFiltrada)
+    private void ActualizarFiltrosDisponibles(DataView vistaFiltrada)
     {
-        // Limpiamos listas para evitar acumulación
         tablasFiltrosPaciente.Clear();
         tablasFiltrosPrestacion.Clear();
         tablasFiltrosMedico.Clear();
@@ -3645,40 +3719,40 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         tablasFiltrosNumeroDeInternacion.Clear();
         tablasFiltrosFecha.Clear();
 
-        RecargarFiltroGenerico(dataTableFiltrada, "paciente", filtroPaciente, tablasFiltrosPaciente, "Paciente");
-        RecargarFiltroGenerico(dataTableFiltrada, "codigo", filtroPrestacion, tablasFiltrosPrestacion, "Prestación");
-        RecargarFiltroGenerico(dataTableFiltrada, "medico", filtroProfesional, tablasFiltrosMedico, "Profesional");
+        RecargarFiltroGenerico(vistaFiltrada, "paciente", filtroPaciente, tablasFiltrosPaciente, "Paciente");
+        RecargarFiltroGenerico(vistaFiltrada, "codigo", filtroPrestacion, tablasFiltrosPrestacion, "Prestación");
+        RecargarFiltroGenerico(vistaFiltrada, "medico", filtroProfesional, tablasFiltrosMedico, "Profesional");
 
-        if (dataTableFiltrada.Columns.Contains("modulo"))
-            RecargarFiltroGenerico(dataTableFiltrada, "modulo", filtroModulo, tablasFiltrosModulo, "Módulo");
+        if (vistaFiltrada.Table.Columns.Contains("modulo"))
+            RecargarFiltroGenerico(vistaFiltrada, "modulo", filtroModulo, tablasFiltrosModulo, "Módulo");
 
-        string colNroInternacion = dataTableFiltrada.Columns.Contains("nro_internacion") ? "nro_internacion" :
-                                   dataTableFiltrada.Columns.Contains("nro_int") ? "nro_int" : null;
+        string colNroInternacion = vistaFiltrada.Table.Columns.Contains("nro_internacion") ? "nro_internacion" :
+                                   vistaFiltrada.Table.Columns.Contains("nro_int") ? "nro_int" : null;
         if (colNroInternacion != null)
-            RecargarFiltroGenerico(dataTableFiltrada, colNroInternacion, filtroNumeroDeInternacion, tablasFiltrosNumeroDeInternacion, "N° de internación");
+            RecargarFiltroGenerico(vistaFiltrada, colNroInternacion, filtroNumeroDeInternacion, tablasFiltrosNumeroDeInternacion, "N° de internación");
 
-        if (dataTableFiltrada.Columns.Contains("fecha"))
+        if (vistaFiltrada.Table.Columns.Contains("fecha"))
         {
             var dtUnico = new DataTable();
             dtUnico.Columns.Add("fecha", typeof(string));
             dtUnico.Rows.Add("Fecha");
 
             var fechasUnicas = new HashSet<string>();
-            foreach (DataRow fila in dataTableFiltrada.Rows)
+            foreach (DataRowView rowView in vistaFiltrada)
             {
-                if (!fila.IsNull("fecha"))
-                    fechasUnicas.Add(Convert.ToDateTime(fila["fecha"]).ToString("dd/MM/yyyy"));
+                if (rowView.Row["fecha"] != DBNull.Value)
+                    fechasUnicas.Add(Convert.ToDateTime(rowView.Row["fecha"]).ToString("dd/MM/yyyy"));
             }
             foreach (var fecha in fechasUnicas.OrderBy(x => x))
                 dtUnico.Rows.Add(fecha);
 
             tablasFiltrosFecha.Add(dtUnico);
-            cargaListaFecha = true;
+            SetFlagFiltro("fecha", true);
             comboFiltroFecha.DataSource = dtUnico;
             comboFiltroFecha.DisplayMember = "fecha";
             comboFiltroFecha.ValueMember = "fecha";
             comboFiltroFecha.SelectedIndex = 0;
-            cargaListaFecha = false;
+            SetFlagFiltro("fecha", false);
         }
     }
 
