@@ -31,8 +31,7 @@ namespace Debitos
             _facturaTipo = facturaTipo;
             btnGuardar.Visible = false;
             fecha = dateTimePicker1.Value;
-            string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
-            _repository = new DebitosRepository(connectionString);
+            _repository = new DebitosRepository(DatabaseConfig.ConnectionString);
         }
 
 

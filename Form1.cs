@@ -168,7 +168,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     protected bool cargaListaFacturaNumero = false;
     protected bool cargaListaNumeroDeInternacion = false;
 
-    public string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
     protected string cargaMotivoDeDebitos = "SELECT DISTINCT descripcion from motivodeldebito ORDER BY descripcion ASC";
     
 
@@ -270,7 +269,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         // (Al final del constructor)
         string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
-        _repository = new DebitosRepository(connectionString); // <-- Guardamos en la variable global
+        _repository = new DebitosRepository(DatabaseConfig.ConnectionString); // <-- Guardamos en la variable global
         _presenter = new PrestacionesPresenter(this, _repository);
 
     }

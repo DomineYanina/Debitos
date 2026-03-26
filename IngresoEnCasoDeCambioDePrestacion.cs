@@ -20,13 +20,12 @@ namespace Debitos
             InitializeComponent();
 
             // Lógica para cargar datos en el comboBox1 (sin mostrar los valores aún)
-            string cadenaConexion = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
             string comandoLlenadoFiltroPrestacion = "SELECT DISTINCT codigo FROM amb_liquidado ORDER BY codigo ASC";
             DataTable dataTablePrestacion = new DataTable();
 
             try
             {
-                using (NpgsqlConnection connection = new NpgsqlConnection(cadenaConexion))
+                using (NpgsqlConnection connection = new NpgsqlConnection(DatabaseConfig.ConnectionString))
                 {
                     connection.Open();  // Asegúrate de abrir la conexión antes de usarla
 

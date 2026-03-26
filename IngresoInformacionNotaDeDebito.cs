@@ -30,8 +30,7 @@ namespace Debitos
             _facturaLetra = facturaLetra;
             _facturaPuntoDeVenta = facturaPuntoDeVenta;
             _facturaTipo = facturaTipo;
-            string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
-            _repository = new DebitosRepository(connectionString);
+            _repository = new DebitosRepository(DatabaseConfig.ConnectionString);
         }
 
         private void txtPuntoDeVenta_TextChanged_1(object sender, EventArgs e)

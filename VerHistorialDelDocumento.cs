@@ -24,12 +24,12 @@ namespace Debitos
         private DataTable resultadoAuxSig = new DataTable();
         private DataTable resultado = new DataTable();
 
+        NpgsqlConnection conexion = new NpgsqlConnection(DatabaseConfig.ConnectionString);
+
         private string tipo_doc = "";
         private string letra = "";
         private int numero = 0;
         private int ptovta = 0;
-
-        NpgsqlConnection conexion = new NpgsqlConnection("Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;");
 
         public VerHistorialDelDocumento(int facturaNumero, String facturaLetra, int facturaPuntoDeVenta, String facturaTipo)
         {
