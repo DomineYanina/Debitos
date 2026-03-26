@@ -1,12 +1,13 @@
 ﻿using ClosedXML.Excel;
+using Debitos.Models;
+using Debitos.Presenters;
+using Debitos.Repositories;
+using Debitos.Views;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
-using Debitos.Views;
-using Debitos.Presenters;
-using Debitos.Repositories;
 using System.Security.Cryptography;
 
 namespace Debitos;
@@ -14,6 +15,7 @@ namespace Debitos;
 public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la interfaz
 {
     private PrestacionesPresenter _presenter; // <-- El presentador
+    private DebitosRepository _repository;
     public event EventHandler BuscarDocumentoEvent; // <-- El evento que pide la interfaz
 
     // Implementación de las propiedades para manejar la UI desde el Presentador
@@ -268,8 +270,8 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         // (Al final del constructor)
         string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
-        var repository = new DebitosRepository(connectionString);
-        _presenter = new PrestacionesPresenter(this, repository);
+        _repository = new DebitosRepository(connectionString); // <-- Guardamos en la variable global
+        _presenter = new PrestacionesPresenter(this, _repository);
 
     }
 
@@ -1190,29 +1192,31 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (!cargaLista)
-            return;
+        if (cargarSoloFiltroMotivoDebito == false)
+        {
+            if (filtroMotivoDebito.SelectedIndex != -1)
+            {
+                // Obtenemos el motivo seleccionado
+                string motivoDebito = filtroMotivoDebito.SelectedItem.ToString();
 
-        string motivoSeleccionado = filtroMotivoDebito.Text;
-        if (motivoSeleccionado == "Borrar")
-        {
-            motivoSeleccionado = "";
-        }
+                // Iteramos sobre TODAS las celdas seleccionadas, igual que en el filtroMotivoDeRefactura
+                foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
+                {
+                    var row = dataGridView1.Rows[cell.RowIndex];
+                    row.Cells["NC_MotivoDeDebito"].Value = motivoDebito;
+                    row.Cells["NC_DebitoAceptado"].Value = false; // Automáticamente se marca que no es un débito aceptado
+                }
 
-        if (motivoSeleccionado == "Prestacion incluida en otra" && checkMotivoDebito.Checked)
-        {
-            AplicarPrestacionIncluidaEnOtraATodasLasFilas();
-        }
-        else if (checkMotivoDebito.Checked)
-        {
-            AplicarMotivoDebitoATodasLasFilas(motivoSeleccionado);
-        }
-        else
-        {
-            AplicarMotivoDebitoACeldasSeleccionadas(motivoSeleccionado);
-        }
+                checkMotivoDebito.Checked = false;
+                filtroMotivoDebito.SelectedItem = null;
+                GuardarValoresParaActualizarMontoAuditados();
 
-        GuardarValoresParaActualizarMontoAuditados();
+                // Es importante detener la edición para que el valor "quede fijado" en la grilla visual
+                dataGridView1.EndEdit();
+                contarFilasConDebitoAceptado();
+            }
+        }
+        cargarSoloFiltroMotivoDebito = false;
     }
 
     private void AplicarPrestacionIncluidaEnOtraATodasLasFilas()
@@ -2355,17 +2359,17 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnNuevaNotaDeCrédito_Click(object sender, EventArgs e)
     {
-        LimpiarAuxiliarNotaDeCredito();
+        _repository.LimpiarAuxiliarNC();
 
         switch (FacturaTipo)
         {
             case "FC":
                 GuardarValoresAntesDeDeshacerFiltro();
-                InsertarAuxiliarNotaDeCreditoFC();
+                _repository.InsertarAuxiliarNC_FC(listaValoresParaBorradoDeFiltros, usuario, TipoRegistroFiltrado);
                 break;
             case "ND":
                 GuardarValoresAntesDeDeshacerFiltroND();
-                InsertarAuxiliarNotaDeCreditoND();
+                _repository.InsertarAuxiliarNC_ND(listaValoresParaBorradoDeFiltrosND, usuario, TipoRegistroFiltrado);
                 break;
         }
 
@@ -2375,67 +2379,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblModulo.Visible = false;
         btnBorrarCelda.Visible = false;
         lblCantidadDeRegistrosFiltrados.Visible = false;
-    }
-
-    private void LimpiarAuxiliarNotaDeCredito()
-    {
-        string queryDelete = "DELETE FROM auxnc";
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-        using var comando = new NpgsqlCommand(queryDelete, connection);
-        comando.ExecuteNonQuery();
-    }
-
-    private void InsertarAuxiliarNotaDeCreditoFC()
-    {
-        string comando = @"INSERT INTO auxnc 
-        (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro) 
-        VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @comentarios, @tiporegistro);";
-
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-        foreach (var item in listaValoresParaBorradoDeFiltros)
-        {
-            using var command = new NpgsqlCommand(comando, connection);
-            command.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-            command.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-            command.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@prestacionenglobante", item.prestacionEnglobante ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@usuario", usuario);
-            command.Parameters.AddWithValue("@tiporegistro", TipoRegistroFiltrado);
-            command.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-            command.ExecuteNonQuery();
-        }
-    }
-
-    private void InsertarAuxiliarNotaDeCreditoND()
-    {
-        string comandoND = @"INSERT INTO auxnc 
-        (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, id_notadedebito, comentarios, tiporegistro) 
-        VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @id_notadedebito, @comentarios, @tiporegistro);";
-
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-        foreach (var item in listaValoresParaBorradoDeFiltrosND)
-        {
-            using var commandND = new NpgsqlCommand(comandoND, connection);
-            commandND.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-            commandND.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-            commandND.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@usuario", usuario);
-            commandND.Parameters.AddWithValue("@tiporegistro", TipoRegistroFiltrado);
-            commandND.Parameters.AddWithValue("@id_notadedebito", item.idNotaDeDebito ?? (object)DBNull.Value);
-            commandND.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-            commandND.ExecuteNonQuery();
-        }
     }
 
     private void AbrirFormularioNotaDeCredito()
@@ -2449,47 +2392,15 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private void btnNuevaNotaDeDébito_Click(object sender, EventArgs e)
     {
         GuardarValoresAntesDeDeshacerFiltroNC();
-        LimpiarAuxiliarNotaDeDebito();
-        InsertarAuxiliarNotaDeDebito();
+        _repository.LimpiarAuxiliarND();
+        _repository.InsertarAuxiliarND(listaValoresParaBorradoDeFiltrosNC, usuario, TipoRegistroFiltrado);
+
         AbrirFormularioNotaDeDebito();
         limpiarPantall();
         panel1.Visible = false;
         lblModulo.Visible = false;
         btnBorrarCelda.Visible = false;
         lblCantidadDeRegistrosFiltrados.Visible = false;
-    }
-
-    private void LimpiarAuxiliarNotaDeDebito()
-    {
-        string queryDelete = "DELETE FROM auxnd";
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-        using var comando = new NpgsqlCommand(queryDelete, connection);
-        comando.ExecuteNonQuery();
-    }
-
-    private void InsertarAuxiliarNotaDeDebito()
-    {
-        string comando = @"INSERT INTO auxnd 
-        (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, comentarios, tiporegistro) 
-        VALUES (@id_notadecredito, @motivorefactura, @importerefactura, @codigo, @usuario, @id_prestacion, @comentarios, @tiporegistro);";
-
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-
-        foreach (var item in listaValoresParaBorradoDeFiltrosNC)
-        {
-            using var command = new NpgsqlCommand(comando, connection);
-            command.Parameters.AddWithValue("@id_notadecredito", item.idNotaDeCredito);
-            command.Parameters.AddWithValue("@motivorefactura", item.motivoRefactura ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@importerefactura", item.importeRefactura);
-            command.Parameters.AddWithValue("@codigo", item.codigo ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@usuario", usuario);
-            command.Parameters.AddWithValue("@tiporegistro", TipoRegistroFiltrado);
-            command.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-            command.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-            command.ExecuteNonQuery();
-        }
     }
 
     private void AbrirFormularioNotaDeDebito()
@@ -2696,25 +2607,49 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void GuardarParcialFC()
     {
-        GuardarValoresAntesDeDeshacerFiltro();
-        string queryObtenerFC = @"SELECT * FROM notadecredito WHERE id_prestacion = @id_prestacion;";
-        string queryNoCompleto = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion)";
-        string queryInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, cargadocompletamente, comentarios, tiporegistro) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @cargadocompletamente, @comentarios, @tiporegistro)";
-        string queryUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasFacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, prestacionenglobante = @prestacionenglobante, usuario = @usuario, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargadocompletamente;";
+        dataGridView1.SuspendLayout();
+        var listaParaGuardar = new List<CargaParcialDTO>();
 
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-
-        foreach (var item in listaValoresParaBorradoDeFiltros)
+        foreach (DataGridViewRow row in dataGridView1.Rows)
         {
-            if (ExisteRegistro(connection, queryObtenerFC, item.idPrestacion))
+            bool debitoAceptado = row.Cells["NC_DebitoAceptado"].Value != DBNull.Value && Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value);
+            string motivoDebito = row.Cells["NC_MotivoDeDebito"].Value?.ToString() ?? "";
+            string motivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value?.ToString() ?? "";
+
+            if (debitoAceptado || !string.IsNullOrEmpty(motivoDebito) || !string.IsNullOrEmpty(motivoRefactura))
             {
-                ActualizarNotadeCredito(connection, queryUpdate, item, item.idPrestacion, item.motivoRefactura, item.motivoDebito, item.importeDebito, item.importeRefactura, item.diasFacturados, item.debitoAceptado, item.prestacionEnglobante, item.comentarios);
+                var dto = new CargaParcialDTO
+                {
+                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    DebitoAceptado = debitoAceptado,
+                    MotivoDebito = row.Cells["NC_MotivoDeDebito"].Value,
+                    ImporteDebitado = row.Cells["NC_ImporteDebitado"].Value,
+                    DiasFacturados = row.Cells["NC_DiasFacturados"].Value,
+                    MotivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value,
+                    ImporteRefactura = row.Cells["NC_ImporteDeRefactura"].Value,
+                    PrestacionEnglobante = row.Cells["NC_PrestacionEnglobante"].Value?.ToString(),
+                    Comentarios = row.Cells["NC_Comentarios"].Value?.ToString(),
+                    CargadoCompletamente = false,
+                    Usuario = usuario
+                    // Eliminamos la asignación de EsActualizacion
+                };
+
+                listaParaGuardar.Add(dto);
             }
-            else
+        }
+
+        dataGridView1.ResumeLayout();
+
+        if (listaParaGuardar.Count > 0)
+        {
+            try
             {
-                InsertarCargaIncompleta(connection, queryNoCompleto, item.idPrestacion);
-                InsertarNotadeCredito(connection, queryInsert, item, item.idPrestacion, item.motivoRefactura, item.motivoDebito, item.importeDebito, item.importeRefactura, item.diasFacturados, item.debitoAceptado, item.prestacionEnglobante, item.comentarios, TipoRegistroFiltrado);
+                _repository.GuardarCargaParcialFC(listaParaGuardar);
+                MessageBox.Show("Carga parcial guardada correctamente.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al guardar: " + ex.Message);
             }
         }
     }
