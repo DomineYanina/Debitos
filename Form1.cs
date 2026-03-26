@@ -2680,7 +2680,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             try
             {
                 _repository.GuardarCargaParcialFC(listaParaGuardar);
-                MessageBox.Show("Carga parcial guardada correctamente.");
             }
             catch (Exception ex)
             {
@@ -3447,8 +3446,20 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         checkMotivoDeRefactura.Visible = visible;
         btnExportar.Visible = visible;
         btnBorrarCelda.Visible = visible;
-        btnNuevaNotaDeCrédito.Visible = visible;
-        btnNuevaNotaDeDébito.Visible = visible;
+        // CORRECCIÓN: Lógica condicional para los botones de nueva nota
+        if (visible)
+        {
+            // Si es FC o ND, solo se puede hacer Nota de Crédito
+            btnNuevaNotaDeCrédito.Visible = (FacturaTipo == "FC" || FacturaTipo == "ND");
+
+            // Si es NC, solo se puede hacer Nota de Débito
+            btnNuevaNotaDeDébito.Visible = (FacturaTipo == "NC");
+        }
+        else
+        {
+            btnNuevaNotaDeCrédito.Visible = false;
+            btnNuevaNotaDeDébito.Visible = false;
+        }
         btnLimpiarFila.Visible = visible;
         btnGuardarParcialmente.Visible = visible;
         soloPrestacionesValorizadas.Visible = visible;
