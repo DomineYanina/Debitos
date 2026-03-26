@@ -410,7 +410,6 @@ namespace Debitos
             dataGridView1.CellValueChanged += dataGridView1_CellValueChanged;
             dataGridView1.ColumnHeaderMouseClick += dataGridView1_ColumnHeaderMouseClick;
             dataGridView1.DataError += dataGridView1_DataError;
-            dataGridView1.Sorted += DataGridView1_Sorted;
             // 
             // filtroDebitoAceptado
             // 

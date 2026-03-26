@@ -177,30 +177,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, int? idNotaDeDebito)> listaValoresParaBorradoDeFiltrosND = new List<(int, object?, object?, double?, double?, string?, bool, object?, string?, int?)>();
 
     // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura, object motivoDebito, double importeRefactura, double importeDebito)> listaValores = new List<(int, object, object, double, double)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura, object motivoDebito, double importeRefactura, double importeDebito)> listaFiltrada = new List<(int, object, object, double, double)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura, object motivoDebito)> valoresParaFiltros = new List<(int, object, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura, object motivoDebito)> valoresOriginales = new List<(int, object, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura)> listaValoresNC = new List<(int, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura)> listaFiltradaNC = new List<(int, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura)> valoresParaFiltrosNC = new List<(int, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
-    private List<(int idPrestacion, object motivoRefactura)> valoresOriginalesNC = new List<(int, object)>();
-
-    // Estructura para almacenar los datos antes de ordenar
     private List<(int idPrestacion, object importeRefactura)> listaValoresParaImporteDeRefactura = new List<(int, object)>();
 
     // Estructura para almacenar los datos antes de ordenar
@@ -352,7 +328,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         tablasFiltrosNumeroDeInternacion.Clear();
 
         // Estructura para almacenar los datos antes de ordenar
-        listaValores = new List<(int, object, object, double, double)>();
     }
 
     private void btnBorrarFiltros_Click(object sender, EventArgs e)
@@ -2577,19 +2552,8 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void dataGridView1_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
     {
-        // Guardar los valores antes de ordenar
-        switch (FacturaTipo)
-        {
-            case "FC":
-            case "ND":
-                GuardarValoresAntesDeOrdenar();
-                break;
-            case "NC":
-                GuardarValoresAntesDeOrdenarNC();
-                break;
-        }
-
-        // Luego, aplicar el formato de columnas
+        // La grilla ahora se ordena nativamente gracias al BindingSource.
+        // Solo aplicamos nuevamente el formato visual.
         switch (FacturaTipo)
         {
             case "FC":
@@ -2790,26 +2754,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblFecSel.Visible = true;
         comboFiltroFecha.Visible = false;
         AplicarFiltrosActivos();
-    }
-
-    // Método para guardar los valores antes de ordenar
-    private void GuardarValoresAntesDeOrdenar()
-    {
-        listaValores.Clear();
-
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (row.Cells["id_prestacion"].Value != null && row.Cells["NC_MotivoDeRefactura"].Value != null && row.Cells["NC_MotivoDeDebito"].Value != null)
-            {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-                object motivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value;
-                object motivoDebito = row.Cells["NC_MotivoDeDebito"].Value;
-                double importeRefactura = row.Cells["NC_ImporteDeRefactura"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDeRefactura"].Value);
-                double importeDebito = row.Cells["NC_ImporteDebitado"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDebitado"].Value);
-                listaValores.Add((idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito));
-                valoresOriginales.Add((idPrestacion, motivoRefactura, motivoDebito));
-            }
-        }
     }
 
     private void GuardarValoresParaActualizarMontoAuditados()
@@ -3131,121 +3075,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 listaValoresParaBorradoDeFiltrosND.Add(nuevoElemento);
             else
                 listaValoresParaBorradoDeFiltrosND[index] = nuevoElemento;
-        }
-    }
-
-    private void GuardarValoresAntesDeOrdenarNC()
-    {
-        listaValores.Clear();
-
-        switch (FacturaTipo)
-        {
-            case "FC":
-                foreach (DataGridViewRow row in dataGridView1.Rows)
-                {
-                    if (row.Cells["id_prestacion"].Value != null && row.Cells["ND_MotivoDeRefactura"].Value != null && row.Cells["ND_MotivoDeDebito"].Value != null)
-                    {
-                        int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-                        object motivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value;
-                        object motivoDebito = row.Cells["ND_MotivoDeDebito"].Value;
-                        double importeRefactura = row.Cells["NC_ImporteRefactura"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteRefactura"].Value);
-                        double importeDebito = row.Cells["NC_ImporteDebitado"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDebitado"].Value);
-                        listaValores.Add((idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito));
-                        valoresOriginales.Add((idPrestacion, motivoRefactura, motivoDebito));
-                    }
-                }
-                break;
-            case "NC":
-                foreach (DataGridViewRow row in dataGridView1.Rows)
-                {
-                    if (row.Cells["id_prestacion"].Value != null && row.Cells["ND_MotivoDeRefactura"].Value != null)
-                    {
-                        int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-                        object motivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value;
-                        listaValoresNC.Add((idPrestacion, motivoRefactura));
-                        valoresOriginalesNC.Add((idPrestacion, motivoRefactura));
-                    }
-                }
-                break;
-            case "ND":
-                foreach (DataGridViewRow row in dataGridView1.Rows)
-                {
-                    if (row.Cells["id_prestacion"].Value != null && row.Cells["ND_MotivoDeRefactura"].Value != null && row.Cells["ND_MotivoDeDebito"].Value != null)
-                    {
-                        int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-                        object motivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value;
-                        object motivoDebito = row.Cells["ND_MotivoDeDebito"].Value;
-                        double importeRefactura = row.Cells["NC_ImporteRefactura"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteRefactura"].Value);
-                        double importeDebito = row.Cells["NC_ImporteDebitado"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDebitado"].Value);
-                        listaValores.Add((idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito));
-                        valoresOriginales.Add((idPrestacion, motivoRefactura, motivoDebito));
-                    }
-                }
-                break;
-        }
-
-    }
-
-    private void RestaurarValoresDespuesDeOrdenar()
-    {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (row.Cells["id_prestacion"].Value != null)
-            {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-
-                // Buscar el valor correspondiente en la lista almacenada
-                var item = listaValores.FirstOrDefault(x => x.idPrestacion == idPrestacion);
-
-                // Restaurar el valor si existe en la lista almacenada
-                if (item.idPrestacion == idPrestacion)
-                {
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_MotivoDeRefactura"].Value = item.motivoRefactura;
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_MotivoDeDebito"].Value = item.motivoDebito;
-                    cargaPrimeraVez = false;
-                }
-            }
-        }
-    }
-
-    private void RestaurarValoresDespuesDeOrdenarNC()
-    {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (row.Cells["id_prestacion"].Value != null)
-            {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-
-                // Buscar el valor correspondiente en la lista almacenada
-                var item = listaValores.FirstOrDefault(x => x.idPrestacion == idPrestacion);
-
-                // Restaurar el valor si existe en la lista almacenada
-                if (item.idPrestacion == idPrestacion)
-                {
-                    cargaPrimeraVez = true;
-                    row.Cells["ND_MotivoDeRefactura"].Value = item.motivoRefactura;
-                    cargaPrimeraVez = true;
-                    row.Cells["ND_MotivoDeDebito"].Value = item.motivoDebito;
-                }
-            }
-        }
-    }
-
-    private void DataGridView1_Sorted(object sender, EventArgs e)
-    {
-        switch (FacturaTipo)
-        {
-            case "FC":
-                RestaurarValoresDespuesDeOrdenar();
-                break;
-            case "NC":
-                RestaurarValoresDespuesDeOrdenarNC();
-                break;
-            case "ND":
-                RestaurarValoresDespuesDeOrdenar();
-                break;
         }
     }
 
