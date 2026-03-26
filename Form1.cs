@@ -2464,57 +2464,61 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnLimpiarFila_Click(object sender, EventArgs e)
     {
-        switch (FacturaTipo)
+        // 1. Forzar cierre de edición
+        if (dataGridView1.IsCurrentCellInEditMode)
         {
-            case "FC":
-                LimpiarCeldasSeleccionadasFC();
-                break;
-            case "NC":
-                LimpiarCeldasSeleccionadasNC();
-                break;
-            case "ND":
-                LimpiarCeldasSeleccionadasND();
-                break;
+            dataGridView1.EndEdit();
         }
+
+        if (dataGridView1.SelectedCells.Count == 0) return;
+
+        var filasUnicas = dataGridView1.SelectedCells.Cast<DataGridViewCell>()
+            .Select(c => c.RowIndex)
+            .Distinct()
+            .Select(i => dataGridView1.Rows[i])
+            .ToList();
+
+        foreach (var row in filasUnicas)
+        {
+            if (FacturaTipo == "FC" || FacturaTipo == "ND")
+            {
+                string[] columnas = { "nc_motivodedebito", "nc_importedebitado", "nc_debitoaceptado", "nc_motivoderefactura", "nc_importederefactura", "nc_comentarios", "nc_prestacionenglobante", "nc_diasfacturados" };
+
+                foreach (string col in columnas)
+                {
+                    if (row.DataGridView.Columns.Contains(col))
+                        row.Cells[col].Value = col == "nc_debitoaceptado" ? false : DBNull.Value;
+                }
+
+                if (row.DataGridView.Columns.Contains("nc_comentarios"))
+                {
+                    row.Cells["nc_comentarios"].ReadOnly = true;
+                    row.Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
+                }
+            }
+            else if (FacturaTipo == "NC")
+            {
+                string[] columnas = { "nd_motivoderefactura", "nd_importederefactura", "nd_comentarios" };
+
+                foreach (string col in columnas)
+                {
+                    if (row.DataGridView.Columns.Contains(col))
+                        row.Cells[col].Value = DBNull.Value;
+                }
+
+                if (row.DataGridView.Columns.Contains("nd_comentarios"))
+                {
+                    row.Cells["nd_comentarios"].ReadOnly = true;
+                    row.Cells["nd_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
+                }
+            }
+        }
+
+        // 2. Actualizamos todos los totales
+        GuardarValoresParaActualizarMontoAuditados();
         GuardarValoresParaActualizarMontoDeRefactura();
-    }
-
-    private void LimpiarCeldasSeleccionadasFC()
-    {
-        foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
-        {
-            var row = dataGridView1.Rows[cell.RowIndex];
-            row.Cells["nc_importederefactura"].Value = DBNull.Value;
-            row.Cells["nc_debitoaceptado"].Value = false;
-            row.Cells["NC_MotivoDeRefactura"].Value = DBNull.Value;
-            row.Cells["NC_MotivoDeDebito"].Value = DBNull.Value;
-            row.Cells["nc_importedebitado"].Value = DBNull.Value;
-        }
         contarFilasConDebitoAceptado();
-    }
-
-    private void LimpiarCeldasSeleccionadasNC()
-    {
-        foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
-        {
-            var row = dataGridView1.Rows[cell.RowIndex];
-            row.Cells["NC_MotivoDeRefactura"].Value = DBNull.Value;
-            row.Cells["nc_importederefactura"].Value = DBNull.Value;
-        }
-    }
-
-    private void LimpiarCeldasSeleccionadasND()
-    {
-        foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
-        {
-            var row = dataGridView1.Rows[cell.RowIndex];
-            row.Cells["nc_importederefactura"].Value = DBNull.Value;
-            row.Cells["nc_debitoaceptado"].Value = false;
-            row.Cells["NC_MotivoDeRefactura"].Value = DBNull.Value;
-            row.Cells["NC_MotivoDeDebito"].Value = DBNull.Value;
-            row.Cells["nc_importedebitado"].Value = DBNull.Value;
-        }
-        contarFilasConDebitoAceptado();
+        dataGridView1.Refresh();
     }
 
     private void btnExportar_Click_1(object sender, EventArgs e)
@@ -2687,172 +2691,89 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void GuardarParcialNC()
     {
-        GuardarValoresAntesDeDeshacerFiltroNC();
-        string queryObtenerNC = @"SELECT * FROM notadedebito WHERE id_prestacion = @id_prestacion;";
-        string queryNoCompleto = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion)";
-        string queryInsert = @"INSERT INTO notadedebito (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, cargadocompletamente, comentarios, tiporegistro) VALUES (@id_notadecredito, @motivoderefactura, @importederefactura, @codigo, @usuario, @id_prestacion, @cargadocompletamente, @comentarios, @tiporegistro);";
-        string queryUpdate = @"UPDATE notadedebito SET motivorefactura = @motivoderefactura, importerefactura = @importederefactura, usuario = @usuario, codigo = @codigo, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargadocompletamente;";
+        dataGridView1.SuspendLayout();
+        var listaParaGuardar = new List<CargaParcialDTO>();
 
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-
-        foreach (var item in listaValoresParaBorradoDeFiltrosNC)
+        foreach (DataGridViewRow row in dataGridView1.Rows)
         {
-            if (cargaParcialPreviamenteCreada && ExisteRegistro(connection, queryObtenerNC, item.idPrestacion))
+            string motivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value?.ToString() ?? "";
+
+            if (!string.IsNullOrWhiteSpace(motivoRefactura))
             {
-                ActualizarNotaDeDebito(connection, queryUpdate, item, item.codigo, item.idNotaDeCredito, item.idPrestacion, item.motivoRefactura, item.importeRefactura, item.comentarios);
+                var dto = new CargaParcialDTO
+                {
+                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    IdNotaDeCredito = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    MotivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value,
+                    ImporteRefactura = row.Cells["nd_importederefactura"].Value,
+                    Codigo = row.Cells["codigo"].Value?.ToString(),
+                    Comentarios = row.Cells["nd_comentarios"].Value?.ToString(),
+                    CargadoCompletamente = false,
+                    Usuario = usuario,
+                    TipoRegistro = TipoRegistroFiltrado
+                };
+                listaParaGuardar.Add(dto);
             }
-            else
+        }
+        dataGridView1.ResumeLayout();
+
+        if (listaParaGuardar.Count > 0)
+        {
+            try
             {
-                InsertarCargaIncompleta(connection, queryNoCompleto, item.idPrestacion);
-                InsertarNotaDeDebito(connection, queryInsert, item, item.codigo, item.idNotaDeCredito, item.idPrestacion, item.motivoRefactura, item.importeRefactura, item.comentarios);
+                _repository.GuardarCargaParcialNC(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al guardar NC: " + ex.Message);
             }
         }
     }
 
     private void GuardarParcialND()
     {
-        string queryObtenerND = @"SELECT * FROM notadecredito WHERE id_prestacion = @id_prestacion;";
-        string queryNoCompleto = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion)";
-        string queryInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, cargadocompletamente, id_notadedebito, comentarios) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @cargadocompletamente, @id_notadedebito, @comentarios)";
-        string queryUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, usuario = @usuario, cargadocompletamente = @cargarcompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion AND id_notadedebito = @id_notadedebito;";
+        dataGridView1.SuspendLayout();
+        var listaParaGuardar = new List<CargaParcialDTO>();
 
-        using var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-
-        foreach (var item in listaValoresParaBorradoDeFiltrosND)
+        foreach (DataGridViewRow row in dataGridView1.Rows)
         {
-            if (cargaParcialPreviamenteCreada && ExisteRegistro(connection, queryObtenerND, item.idPrestacion))
+            bool debitoAceptado = row.Cells["NC_DebitoAceptado"].Value != DBNull.Value && Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value);
+            string motivoDebito = row.Cells["NC_MotivoDeDebito"].Value?.ToString() ?? "";
+            string motivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value?.ToString() ?? "";
+
+            if (debitoAceptado || !string.IsNullOrWhiteSpace(motivoDebito) || !string.IsNullOrWhiteSpace(motivoRefactura))
             {
-                ActualizarNotadeCreditoND(connection, queryUpdate, item);
-            }
-            else
-            {
-                InsertarCargaIncompleta(connection, queryNoCompleto, item.idPrestacion);
-                InsertarNotadeCreditoND(connection, queryInsert, item);
+                var dto = new CargaParcialDTO
+                {
+                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    IdNotaDeDebito = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    DebitoAceptado = debitoAceptado,
+                    MotivoDebito = row.Cells["NC_MotivoDeDebito"].Value,
+                    ImporteDebitado = row.Cells["NC_ImporteDebitado"].Value,
+                    DiasFacturados = row.Cells["NC_DiasFacturados"].Value,
+                    MotivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value,
+                    ImporteRefactura = row.Cells["NC_ImporteDeRefactura"].Value,
+                    PrestacionEnglobante = row.Cells["NC_PrestacionEnglobante"].Value?.ToString(),
+                    Comentarios = row.Cells["NC_Comentarios"].Value?.ToString(),
+                    CargadoCompletamente = false,
+                    Usuario = usuario
+                };
+                listaParaGuardar.Add(dto);
             }
         }
-    }
+        dataGridView1.ResumeLayout();
 
-    private bool ExisteRegistro(NpgsqlConnection connection, string query, int idPrestacion)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        using var adapter = new NpgsqlDataAdapter(cmd);
-        var dt = new DataTable();
-        adapter.Fill(dt);
-        return dt.Rows.Count > 0;
-    }
-
-    private void InsertarCargaIncompleta(NpgsqlConnection connection, string query, int idPrestacion)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@tipodocumento", FacturaTipo);
-        cmd.Parameters.AddWithValue("@letra", FacturaLetra);
-        cmd.Parameters.AddWithValue("@ptovta", FacturaPuntoDeVenta);
-        cmd.Parameters.AddWithValue("@numero", FacturaNumero);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void InsertarNotadeCredito(NpgsqlConnection connection, string query, dynamic item, int idPrestacion, object motivoRefactura, object motivoDebito, double? importeDebito, double? importeRefactura, object diasFacturados, bool debitoAceptado, string prestacionEnglobante, string comentarios, string tiporegistro)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        cmd.Parameters.AddWithValue("@motivodedebito", motivoDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@diasfacturados", diasFacturados);
-        cmd.Parameters.AddWithValue("@importedebitado", (object)importeDebito ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@debitoaceptado", debitoAceptado);
-        cmd.Parameters.AddWithValue("@motivoderefactura", motivoRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importederefactura", (object)importeRefactura ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@prestacionenglobante", prestacionEnglobante);
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.Parameters.AddWithValue("@comentarios", comentarios);
-        cmd.Parameters.AddWithValue("@tiporegistro", tiporegistro);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void ActualizarNotadeCredito(NpgsqlConnection connection, string query, dynamic item, int idPrestacion, object motivoRefactura, object motivoDebito, double? importeDebito, double? importeRefactura, object diasFacturados, bool debitoAceptado, string prestacionEnglobante, string comentarios)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@motivodedebito", motivoDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importedebitado", (object?)importeDebito ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@debitoaceptado", debitoAceptado);
-        cmd.Parameters.AddWithValue("@motivoderefactura", motivoRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importederefactura", importeRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@prestacionenglobante", prestacionEnglobante);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        cmd.Parameters.AddWithValue("@diasFacturados", diasFacturados);
-        cmd.Parameters.AddWithValue("@comentarios", comentarios ?? "");
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.Parameters.AddWithValue("@cargarcompletamente", false);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void InsertarNotaDeDebito(NpgsqlConnection connection, string query, dynamic item, string codigo, int idNotaDeCredito, int idPrestacion, object motivoRefactura, double? importeRefactura, string comentarios)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@motivoderefactura", motivoRefactura);
-        cmd.Parameters.AddWithValue("@importederefactura", importeRefactura);
-        cmd.Parameters.AddWithValue("@codigo", codigo);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        cmd.Parameters.AddWithValue("@comentarios", comentarios);
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.Parameters.AddWithValue("@id_notadecredito", idNotaDeCredito);
-        cmd.Parameters.AddWithValue("@tiporegistro", TipoRegistroFiltrado);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void ActualizarNotaDeDebito(NpgsqlConnection connection, string query, dynamic item, string codigo, int idNotaDeCredito, int idPrestacion, object motivoRefactura, double? importeRefactura, string comentarios)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@motivoderefactura", motivoRefactura);
-        cmd.Parameters.AddWithValue("@importederefactura", importeRefactura);
-        cmd.Parameters.AddWithValue("@codigo", codigo);
-        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-        cmd.Parameters.AddWithValue("@comentarios", comentarios);
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.Parameters.AddWithValue("@cargarcompletamente", false);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void InsertarNotadeCreditoND(NpgsqlConnection connection, string query, dynamic item)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-        cmd.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-        cmd.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@id_notadedebito", item.idNotaDeDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.ExecuteNonQuery();
-    }
-
-    private void ActualizarNotadeCreditoND(NpgsqlConnection connection, string query, dynamic item)
-    {
-        using var cmd = new NpgsqlCommand(query, connection);
-        cmd.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-        cmd.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-        cmd.Parameters.AddWithValue("@id_notadedebito", item.idNotaDeDebito ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-        cmd.Parameters.AddWithValue("@usuario", usuario);
-        cmd.Parameters.AddWithValue("@cargadocompletamente", false);
-        cmd.Parameters.AddWithValue("@cargarcompletamente", false);
-        cmd.ExecuteNonQuery();
+        if (listaParaGuardar.Count > 0)
+        {
+            try
+            {
+                _repository.GuardarCargaParcialND(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al guardar ND: " + ex.Message);
+            }
+        }
     }
 
     private void limpiarPantall()
@@ -3758,47 +3679,30 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnBorrarCelda_Click(object sender, EventArgs e)
     {
+        // 1. Forzamos el cierre del editor activo (TextBox) para que la UI se actualice al instante
+        if (dataGridView1.IsCurrentCellInEditMode)
+        {
+            dataGridView1.EndEdit();
+        }
+
         if (dataGridView1.SelectedCells.Count == 0)
         {
             MessageBox.Show("Por favor, seleccione una o más celdas en el DataGridView para aplicar el valor.");
             return;
         }
 
-        switch (FacturaTipo)
-        {
-            case "FC":
-                borrarCeldaFC();
-                break;
-            case "NC":
-                borrarCeldaNC();
-                break;
-            case "ND":
-                borrarCeldaFC();
-                break;
-        }
-        dataGridView1.Refresh();
-    }
-
-    private void borrarCeldaFC()
-    {
-        // Lista de nombres de columnas a borrar
-        var columnasABorrar = new HashSet<string>
-        {
-            "nc_comentarios",
-            "nc_prestacionenglobante",
-            "nc_importederefactura",
-            "nc_motivoderefactura",
-            "nc_importedebitado",
-            "nc_diasfacturados",
-            "nc_motivodedebito",
-            "nc_debitoaceptado"
-        };
+        var columnasAuditables = (FacturaTipo == "FC" || FacturaTipo == "ND")
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "nc_comentarios", "nc_prestacionenglobante", "nc_importederefactura", "nc_motivoderefactura", "nc_importedebitado", "nc_diasfacturados", "nc_motivodedebito", "nc_debitoaceptado" }
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "nd_motivoderefactura", "nd_importederefactura", "nd_comentarios" };
 
         foreach (DataGridViewCell celda in dataGridView1.SelectedCells)
         {
-            string nombreColumna = dataGridView1.Columns[celda.ColumnIndex].Name;
-            if (columnasABorrar.Contains(nombreColumna))
+            string nombreColumna = dataGridView1.Columns[celda.ColumnIndex].Name.ToLower();
+
+            if (columnasAuditables.Contains(nombreColumna))
             {
+                var row = dataGridView1.Rows[celda.RowIndex];
+
                 if (nombreColumna == "nc_debitoaceptado")
                 {
                     celda.Value = false;
@@ -3807,49 +3711,40 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 {
                     celda.Value = DBNull.Value;
 
-                    // Si se borra nc_motivoderefactura, también borrar nc_importederefactura
+                    // Reglas de negocio en cascada
                     if (nombreColumna == "nc_motivoderefactura")
                     {
-                        dataGridView1.Rows[celda.RowIndex].Cells["nc_importederefactura"].Value = DBNull.Value;
-                        dataGridView1.Rows[celda.RowIndex].Cells["nc_comentarios"].ReadOnly = true;
-                        dataGridView1.Rows[celda.RowIndex].Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
+                        row.Cells["nc_importederefactura"].Value = DBNull.Value;
+                        if (row.DataGridView.Columns.Contains("nc_comentarios"))
+                        {
+                            row.Cells["nc_comentarios"].ReadOnly = true;
+                            row.Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
+                        }
                     }
-                    // Si se borra nc_motivodedebito, también borrar nc_importedebitado
-                    if (nombreColumna == "nc_motivodedebito")
+                    else if (nombreColumna == "nc_motivodedebito")
                     {
-                        dataGridView1.Rows[celda.RowIndex].Cells["nc_importedebitado"].Value = DBNull.Value;
+                        row.Cells["nc_importedebitado"].Value = DBNull.Value;
+                    }
+                    else if (nombreColumna == "nd_motivoderefactura")
+                    {
+                        row.Cells["nd_importederefactura"].Value = DBNull.Value;
+                        if (row.DataGridView.Columns.Contains("nd_comentarios"))
+                        {
+                            row.Cells["nd_comentarios"].ReadOnly = true;
+                            row.Cells["nd_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
+                        }
                     }
                 }
             }
         }
+
+        // 2. Actualizamos todos los totales de la pantalla
+        GuardarValoresParaActualizarMontoAuditados();
+        GuardarValoresParaActualizarMontoDeRefactura();
+        contarFilasConDebitoAceptado();
+        dataGridView1.Refresh();
     }
 
-    private void borrarCeldaNC()
-    {
-        // Lista de nombres de columnas a borrar
-        var columnasABorrar = new HashSet<string>
-        {
-            "nd_motivoderefactura",
-            "nd_importederefactura",
-            "nd_comentarios"
-        };
 
-        foreach (DataGridViewCell celda in dataGridView1.SelectedCells)
-        {
-            string nombreColumna = dataGridView1.Columns[celda.ColumnIndex].Name;
-            if (columnasABorrar.Contains(nombreColumna))
-            {
-                celda.Value = DBNull.Value;
-
-                // Si se borra nc_motivoderefactura, también borrar nc_importederefactura
-                if (nombreColumna == "nd_motivoderefactura")
-                {
-                    dataGridView1.Rows[celda.RowIndex].Cells["nd_importederefactura"].Value = DBNull.Value;
-                    dataGridView1.Rows[celda.RowIndex].Cells["nd_comentarios"].ReadOnly = true;
-                    dataGridView1.Rows[celda.RowIndex].Cells["nd_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
-                }
-            }
-        }
-    }
 
 }

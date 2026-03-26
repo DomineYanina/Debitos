@@ -16,5 +16,9 @@ namespace Debitos.Models
         public bool CargadoCompletamente { get; set; }
         public string Usuario { get; set; }
 
+        public int? IdNotaDeCredito { get; set; }
+        public int? IdNotaDeDebito { get; set; }
+        public string? Codigo { get; set; }
+        public string? TipoRegistro { get; set; }
     }
 }

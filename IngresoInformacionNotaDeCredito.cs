@@ -238,14 +238,33 @@ namespace Debitos
                     else
                     {
                         string queryInsertarNuevoRegistro = @"INSERT INTO notadecredito 
-                                (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tipo, letra, ptovta, numero, fecha, comentarios, tiporegistro) 
-                                VALUES 
-                                (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tipo, @letra, @ptovta, @numero, @fecha, @comentarios, @tiporegistro)";
+                (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tipo, letra, ptovta, numero, fecha, comentarios, tiporegistro, cargadocompletamente) 
+                VALUES 
+                (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tipo, @letra, @ptovta, @numero, @fecha, @comentarios, @tiporegistro, true)
+                ON CONFLICT (id_prestacion) 
+                DO UPDATE SET 
+                tipo = EXCLUDED.tipo, 
+                letra = EXCLUDED.letra, 
+                ptovta = EXCLUDED.ptovta, 
+                numero = EXCLUDED.numero, 
+                fecha = EXCLUDED.fecha,
+                cargadocompletamente = true,
+                motivodedebito = EXCLUDED.motivodedebito, 
+                diasfacturados = EXCLUDED.diasfacturados, 
+                importedebitado = EXCLUDED.importedebitado, 
+                debitoaceptado = EXCLUDED.debitoaceptado, 
+                motivoderefactura = EXCLUDED.motivoderefactura, 
+                importederefactura = EXCLUDED.importederefactura, 
+                prestacionenglobante = EXCLUDED.prestacionenglobante, 
+                usuario = EXCLUDED.usuario, 
+                comentarios = EXCLUDED.comentarios, 
+                tiporegistro = EXCLUDED.tiporegistro;";
 
                         using (NpgsqlCommand comandoInsert = new NpgsqlCommand(queryInsertarNuevoRegistro, conexion))
                         {
                             comandoInsert.Parameters.AddWithValue("@id_prestacion", fila[0]);
                             comandoInsert.Parameters.AddWithValue("@motivodedebito", fila[1]);
+                            // ... (el resto de tus AddWithValue quedan exactamente igual que antes) ...
                             comandoInsert.Parameters.AddWithValue("@diasfacturados", fila[2]);
                             comandoInsert.Parameters.AddWithValue("@importedebitado", fila[3]);
                             comandoInsert.Parameters.AddWithValue("@debitoaceptado", fila[4]);
