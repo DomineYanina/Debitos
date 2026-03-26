@@ -503,19 +503,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + bindingSource.Count;
     }
 
-    private void actualizarCantidadDeDebitosAceptados()
-    {
-        int cantidadDeDebitosAceptados = 0;
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            bool debitoAceptado = row.Cells["NC_DebitoAceptado"].Value != DBNull.Value && Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value);
-            if (debitoAceptado)
-            {
-                cantidadDeDebitosAceptados++;
-            }
-        }
-        lblCantidadDeRegistrosConDebitoAceptado.Text = "Cantidad de débitos aceptados: " + cantidadDeDebitosAceptados;
-    }
 
     private void restaurarValoresAlBorrarFiltrosNC()
     {
@@ -1432,7 +1419,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         cargaPrimeraVez = false;
         dataGridView1.Refresh();
         if (debitoIndividual)
-            actualizarCantidadDeDebitosAceptados();
+            contarFilasConDebitoAceptado();
     }
 
     private bool EsColumna(DataGridViewRow fila, int columnIndex, string nombreColumna)
@@ -1705,7 +1692,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
 
             dataGridView1.Refresh();
-            actualizarCantidadDeDebitosAceptados();
+            contarFilasConDebitoAceptado();
         }
         else
         {
@@ -1790,7 +1777,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 }
                 dataGridView1.Refresh();
 
-                actualizarCantidadDeDebitosAceptados();
+                contarFilasConDebitoAceptado();
 
             }
             else
@@ -2571,71 +2558,63 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void GuardarParcialFC()
     {
-        dataGridView1.SuspendLayout();
         var listaParaGuardar = new List<CargaParcialDTO>();
 
-        foreach (DataGridViewRow row in dataGridView1.Rows)
+        // Leemos del BindingSource (memoria RAM)
+        foreach (DataRowView rowView in bindingSource)
         {
-            bool debitoAceptado = row.Cells["NC_DebitoAceptado"].Value != DBNull.Value && Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value);
-            string motivoDebito = row.Cells["NC_MotivoDeDebito"].Value?.ToString() ?? "";
-            string motivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value?.ToString() ?? "";
+            DataRow row = rowView.Row;
+
+            bool debitoAceptado = row["nc_debitoaceptado"] != DBNull.Value && Convert.ToBoolean(row["nc_debitoaceptado"]);
+            string motivoDebito = row["nc_motivodedebito"]?.ToString() ?? "";
+            string motivoRefactura = row["nc_motivoderefactura"]?.ToString() ?? "";
 
             if (debitoAceptado || !string.IsNullOrEmpty(motivoDebito) || !string.IsNullOrEmpty(motivoRefactura))
             {
                 var dto = new CargaParcialDTO
                 {
-                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
                     DebitoAceptado = debitoAceptado,
-                    MotivoDebito = row.Cells["NC_MotivoDeDebito"].Value,
-                    ImporteDebitado = row.Cells["NC_ImporteDebitado"].Value,
-                    DiasFacturados = row.Cells["NC_DiasFacturados"].Value,
-                    MotivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value,
-                    ImporteRefactura = row.Cells["NC_ImporteDeRefactura"].Value,
-                    PrestacionEnglobante = row.Cells["NC_PrestacionEnglobante"].Value?.ToString(),
-                    Comentarios = row.Cells["NC_Comentarios"].Value?.ToString(),
+                    MotivoDebito = row["nc_motivodedebito"],
+                    ImporteDebitado = row["nc_importedebitado"],
+                    DiasFacturados = row["nc_diasfacturados"],
+                    MotivoRefactura = row["nc_motivoderefactura"],
+                    ImporteRefactura = row["nc_importederefactura"],
+                    PrestacionEnglobante = row["nc_prestacionenglobante"]?.ToString(),
+                    Comentarios = row["nc_comentarios"]?.ToString(),
                     CargadoCompletamente = false,
                     Usuario = usuario
-                    // Eliminamos la asignación de EsActualizacion
                 };
-
                 listaParaGuardar.Add(dto);
             }
         }
 
-        dataGridView1.ResumeLayout();
-
         if (listaParaGuardar.Count > 0)
         {
-            try
-            {
-                _repository.GuardarCargaParcialFC(listaParaGuardar);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error al guardar: " + ex.Message);
-            }
+            try { _repository.GuardarCargaParcialFC(listaParaGuardar); }
+            catch (Exception ex) { MessageBox.Show("Error al guardar: " + ex.Message); }
         }
     }
 
     private void GuardarParcialNC()
     {
-        dataGridView1.SuspendLayout();
         var listaParaGuardar = new List<CargaParcialDTO>();
 
-        foreach (DataGridViewRow row in dataGridView1.Rows)
+        foreach (DataRowView rowView in bindingSource)
         {
-            string motivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value?.ToString() ?? "";
+            DataRow row = rowView.Row;
+            string motivoRefactura = row["nd_motivoderefactura"]?.ToString() ?? "";
 
             if (!string.IsNullOrWhiteSpace(motivoRefactura))
             {
                 var dto = new CargaParcialDTO
                 {
-                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
-                    IdNotaDeCredito = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
-                    MotivoRefactura = row.Cells["ND_MotivoDeRefactura"].Value,
-                    ImporteRefactura = row.Cells["nd_importederefactura"].Value,
-                    Codigo = row.Cells["codigo"].Value?.ToString(),
-                    Comentarios = row.Cells["nd_comentarios"].Value?.ToString(),
+                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
+                    IdNotaDeCredito = Convert.ToInt32(row["id_prestacion"]),
+                    MotivoRefactura = row["nd_motivoderefactura"],
+                    ImporteRefactura = row["nd_importederefactura"],
+                    Codigo = row["codigo"]?.ToString(),
+                    Comentarios = row["nd_comentarios"]?.ToString(),
                     CargadoCompletamente = false,
                     Usuario = usuario,
                     TipoRegistro = TipoRegistroFiltrado
@@ -2643,64 +2622,51 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 listaParaGuardar.Add(dto);
             }
         }
-        dataGridView1.ResumeLayout();
 
         if (listaParaGuardar.Count > 0)
         {
-            try
-            {
-                _repository.GuardarCargaParcialNC(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error al guardar NC: " + ex.Message);
-            }
+            try { _repository.GuardarCargaParcialNC(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero); }
+            catch (Exception ex) { MessageBox.Show("Error al guardar NC: " + ex.Message); }
         }
     }
 
     private void GuardarParcialND()
     {
-        dataGridView1.SuspendLayout();
         var listaParaGuardar = new List<CargaParcialDTO>();
 
-        foreach (DataGridViewRow row in dataGridView1.Rows)
+        foreach (DataRowView rowView in bindingSource)
         {
-            bool debitoAceptado = row.Cells["NC_DebitoAceptado"].Value != DBNull.Value && Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value);
-            string motivoDebito = row.Cells["NC_MotivoDeDebito"].Value?.ToString() ?? "";
-            string motivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value?.ToString() ?? "";
+            DataRow row = rowView.Row;
+
+            bool debitoAceptado = row["nc_debitoaceptado"] != DBNull.Value && Convert.ToBoolean(row["nc_debitoaceptado"]);
+            string motivoDebito = row["nc_motivodedebito"]?.ToString() ?? "";
+            string motivoRefactura = row["nc_motivoderefactura"]?.ToString() ?? "";
 
             if (debitoAceptado || !string.IsNullOrWhiteSpace(motivoDebito) || !string.IsNullOrWhiteSpace(motivoRefactura))
             {
                 var dto = new CargaParcialDTO
                 {
-                    IdPrestacion = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
-                    IdNotaDeDebito = Convert.ToInt32(row.Cells["ID_Prestacion"].Value),
+                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
+                    IdNotaDeDebito = Convert.ToInt32(row["id_prestacion"]),
                     DebitoAceptado = debitoAceptado,
-                    MotivoDebito = row.Cells["NC_MotivoDeDebito"].Value,
-                    ImporteDebitado = row.Cells["NC_ImporteDebitado"].Value,
-                    DiasFacturados = row.Cells["NC_DiasFacturados"].Value,
-                    MotivoRefactura = row.Cells["NC_MotivoDeRefactura"].Value,
-                    ImporteRefactura = row.Cells["NC_ImporteDeRefactura"].Value,
-                    PrestacionEnglobante = row.Cells["NC_PrestacionEnglobante"].Value?.ToString(),
-                    Comentarios = row.Cells["NC_Comentarios"].Value?.ToString(),
+                    MotivoDebito = row["nc_motivodedebito"],
+                    ImporteDebitado = row["nc_importedebitado"],
+                    DiasFacturados = row["nc_diasfacturados"],
+                    MotivoRefactura = row["nc_motivoderefactura"],
+                    ImporteRefactura = row["nc_importederefactura"],
+                    PrestacionEnglobante = row["nc_prestacionenglobante"]?.ToString(),
+                    Comentarios = row["nc_comentarios"]?.ToString(),
                     CargadoCompletamente = false,
                     Usuario = usuario
                 };
                 listaParaGuardar.Add(dto);
             }
         }
-        dataGridView1.ResumeLayout();
 
         if (listaParaGuardar.Count > 0)
         {
-            try
-            {
-                _repository.GuardarCargaParcialND(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error al guardar ND: " + ex.Message);
-            }
+            try { _repository.GuardarCargaParcialND(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero); }
+            catch (Exception ex) { MessageBox.Show("Error al guardar ND: " + ex.Message); }
         }
     }
 
@@ -2758,81 +2724,59 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void GuardarValoresParaActualizarMontoAuditados()
     {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
+        listaValoresParaImporteDeDebito.Clear();
+        double importeTotal = 0.0;
+
+        // Iteramos sobre la capa de memoria (súper rápido) en lugar de la UI
+        foreach (DataRowView rowView in bindingSource)
         {
-            object importeValue = row.Cells["NC_ImporteDebitado"].Value;
-            object debitoAceptadoValue = row.Cells["NC_DebitoAceptado"].Value;
+            DataRow row = rowView.Row;
+
+            object importeValue = row["nc_importedebitado"];
+            object debitoAceptadoValue = row["nc_debitoaceptado"];
 
             double importeAux = 0.0;
-            bool tieneImporte = importeValue != DBNull.Value &&
-                                double.TryParse(importeValue.ToString(), out importeAux) &&
-                                importeAux > 0;
+            bool tieneImporte = importeValue != DBNull.Value && double.TryParse(importeValue.ToString(), out importeAux) && importeAux > 0;
+            bool aceptaDebito = debitoAceptadoValue != DBNull.Value && Convert.ToBoolean(debitoAceptadoValue);
 
-            bool aceptaDebito = debitoAceptadoValue != DBNull.Value &&
-                                Convert.ToBoolean(debitoAceptadoValue);
-
-            // ?? La condición final: solo continuar si ambas condiciones son verdaderas
             if (tieneImporte && aceptaDebito)
             {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-
-                bool existe = listaValoresParaImporteDeDebito.Any(item => item.idPrestacion == idPrestacion);
-
-                if (!existe)
-                {
-                    listaValoresParaImporteDeDebito.Add((idPrestacion, importeAux));
-                }
-                else
-                {
-                    int index = listaValoresParaImporteDeDebito.FindIndex(item => item.idPrestacion == idPrestacion);
-                    listaValoresParaImporteDeDebito[index] = (idPrestacion, importeAux);
-                }
+                int idPrestacion = Convert.ToInt32(row["id_prestacion"]);
+                listaValoresParaImporteDeDebito.Add((idPrestacion, importeAux));
+                importeTotal += importeAux; // Sumatoria directa
             }
         }
 
-        // Calcular la suma fuera del bucle para mayor eficiencia
-        double importe = listaValoresParaImporteDeDebito.Sum(item => (double)item.importeRefactura);
-
-        lblMontoTotalRegistrosEnPantalla.Text = ("Suma total de débitos auditados: " + importe.ToString("C"));
-
+        lblMontoTotalRegistrosEnPantalla.Text = "Suma total de débitos auditados: " + importeTotal.ToString("C");
         lblMontoTotalRegistrosEnPantalla.Visible = true;
     }
 
     private void GuardarValoresParaActualizarMontoDeRefactura()
     {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
+        listaValoresParaImporteDeRefactura.Clear();
+        double importeTotal = 0.0;
+
+        foreach (DataRowView rowView in bindingSource)
         {
-            if ((row.Cells["NC_ImporteDeRefactura"].Value != DBNull.Value) && ((row.Cells["NC_DebitoAceptado"].Value == DBNull.Value) || (!Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value))))
+            DataRow row = rowView.Row;
+
+            object importeValue = row["nc_importederefactura"];
+            object debitoAceptadoValue = row["nc_debitoaceptado"];
+
+            bool tieneImporte = importeValue != DBNull.Value;
+            bool noAceptaDebito = debitoAceptadoValue == DBNull.Value || !Convert.ToBoolean(debitoAceptadoValue);
+
+            if (tieneImporte && noAceptaDebito)
             {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
+                int idPrestacion = Convert.ToInt32(row["id_prestacion"]);
+                double importeRefactura = Convert.ToDouble(importeValue);
 
-                // Verificar si el idPrestacion ya está en la lista
-                bool existe = listaValoresParaImporteDeRefactura.Any(item => item.idPrestacion == idPrestacion);
-
-                if (!existe) // Si no existe, agregarlo
-                {
-                    double importeRefactura = 0.0;
-                    if (row.Cells["NC_ImporteDeRefactura"].Value != null)
-                    {
-                        importeRefactura = row.Cells["NC_ImporteDeRefactura"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDeRefactura"].Value);
-                    }
-
-                    listaValoresParaImporteDeRefactura.Add((idPrestacion, importeRefactura));
-                }
-                else
-                {
-                    int index = listaValoresParaImporteDeRefactura.FindIndex(item => item.idPrestacion == idPrestacion);
-                    double nuevoImporte = row.Cells["NC_ImporteDeRefactura"].Value == DBNull.Value ? 0.0 : Convert.ToDouble(row.Cells["NC_ImporteDeRefactura"].Value);
-                    listaValoresParaImporteDeRefactura[index] = (idPrestacion, nuevoImporte);
-                }
+                listaValoresParaImporteDeRefactura.Add((idPrestacion, importeRefactura));
+                importeTotal += importeRefactura;
             }
         }
 
-        // Calcular la suma fuera del bucle para mayor eficiencia
-        double importe = listaValoresParaImporteDeRefactura.Sum(item => (double)item.importeRefactura);
-
-        lblMontosNoAceptados.Text = ("Suma total de débitos a refacturar: " + importe.ToString("C")); // "C" para formato de moneda
-
+        lblMontosNoAceptados.Text = "Suma total de débitos a refacturar: " + importeTotal.ToString("C");
         lblMontosNoAceptados.Visible = true;
     }
 
