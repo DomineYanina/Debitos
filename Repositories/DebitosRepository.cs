@@ -383,5 +383,321 @@ namespace Debitos.Repositories
                 throw;
             }
         }
+
+        public void ProcesarGuardadoNotaDeCredito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
+        {
+            using var connection = new NpgsqlConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                // 1. Extraemos los registros temporales
+                string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro FROM auxnc";
+                var filasAuxnc = new List<object[]>();
+                using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
+                using (var lector = cmdSelect.ExecuteReader())
+                {
+                    while (lector.Read())
+                    {
+                        filasAuxnc.Add(new object[] {
+                        lector["id_prestacion"], lector["motivodedebito"], lector["diasfacturados"],
+                        lector["importedebitado"], lector["debitoaceptado"], lector["motivoderefactura"],
+                        lector["importederefactura"], lector["prestacionenglobante"], lector["usuario"],
+                        lector["comentarios"], lector["tiporegistro"]
+                    });
+                    }
+                }
+
+                // 2. Extraemos los incompletos
+                string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
+                var filasIncompletas = new HashSet<int>();
+                using (var cmdIncompletos = new NpgsqlCommand(querySelectIncompletos, connection, transaction))
+                {
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
+                    cmdIncompletos.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaLetra", facturaLetra);
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
+                    using (var lector = cmdIncompletos.ExecuteReader())
+                    {
+                        while (lector.Read())
+                            filasIncompletas.Add(Convert.ToInt32(lector["id_prestacion"]));
+                    }
+                }
+
+                bool encontrado = false;
+
+                string queryActualizarRegistros = @"UPDATE notadecredito 
+                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente
+                WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente;";
+
+                string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion;";
+
+                string queryUpsertNuevoRegistro = @"INSERT INTO notadecredito 
+                (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tipo, letra, ptovta, numero, fecha, comentarios, tiporegistro, cargadocompletamente) 
+                VALUES 
+                (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tipo, @letra, @ptovta, @numero, @fecha, @comentarios, @tiporegistro, true)
+                ON CONFLICT (id_prestacion) 
+                DO UPDATE SET 
+                tipo = EXCLUDED.tipo, letra = EXCLUDED.letra, ptovta = EXCLUDED.ptovta, 
+                numero = EXCLUDED.numero, fecha = EXCLUDED.fecha, cargadocompletamente = true,
+                motivodedebito = EXCLUDED.motivodedebito, diasfacturados = EXCLUDED.diasfacturados, 
+                importedebitado = EXCLUDED.importedebitado, debitoaceptado = EXCLUDED.debitoaceptado, 
+                motivoderefactura = EXCLUDED.motivoderefactura, importederefactura = EXCLUDED.importederefactura, 
+                prestacionenglobante = EXCLUDED.prestacionenglobante, usuario = EXCLUDED.usuario, 
+                comentarios = EXCLUDED.comentarios, tiporegistro = EXCLUDED.tiporegistro;";
+
+                // 3. Procesamos las prestaciones 
+                foreach (var fila in filasAuxnc)
+                {
+                    int idPrestacion = Convert.ToInt32(fila[0]);
+
+                    if (filasIncompletas.Contains(idPrestacion))
+                    {
+                        encontrado = true;
+                        using (var cmdUpdate = new NpgsqlCommand(queryActualizarRegistros, connection, transaction))
+                        {
+                            cmdUpdate.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                            cmdUpdate.Parameters.AddWithValue("@tipo", tipoDeArchivo);
+                            cmdUpdate.Parameters.AddWithValue("@letra", letraDestino);
+                            cmdUpdate.Parameters.AddWithValue("@ptovta", ptovtaDestino);
+                            cmdUpdate.Parameters.AddWithValue("@numero", numeroDestino);
+                            cmdUpdate.Parameters.AddWithValue("@fecha", fecha);
+                            cmdUpdate.Parameters.AddWithValue("@cargadocompletamente", true);
+                            cmdUpdate.Parameters.AddWithValue("@cargarcompletamente", false);
+                            cmdUpdate.ExecuteNonQuery();
+                        }
+
+                        using (var cmdDelInc = new NpgsqlCommand(queryDeleteIncompletos, connection, transaction))
+                        {
+                            cmdDelInc.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                            cmdDelInc.ExecuteNonQuery();
+                        }
+                    }
+                    else
+                    {
+                        using (var cmdUpsert = new NpgsqlCommand(queryUpsertNuevoRegistro, connection, transaction))
+                        {
+                            cmdUpsert.Parameters.AddWithValue("@id_prestacion", fila[0]);
+                            cmdUpsert.Parameters.AddWithValue("@motivodedebito", fila[1] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@diasfacturados", fila[2] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@importedebitado", fila[3] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@debitoaceptado", fila[4]);
+                            cmdUpsert.Parameters.AddWithValue("@motivoderefactura", fila[5] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@importederefactura", fila[6] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@prestacionenglobante", fila[7] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@usuario", fila[8] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@comentarios", fila[9] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@tiporegistro", fila[10] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@letra", letraDestino);
+                            cmdUpsert.Parameters.AddWithValue("@ptovta", ptovtaDestino);
+                            cmdUpsert.Parameters.AddWithValue("@numero", numeroDestino);
+                            cmdUpsert.Parameters.AddWithValue("@fecha", fecha);
+                            cmdUpsert.Parameters.AddWithValue("@tipo", tipoDeArchivo);
+                            cmdUpsert.ExecuteNonQuery();
+                        }
+                    }
+                }
+
+                // 4. Ejecutamos la limpieza una sola vez fuera del bucle
+                if (filasIncompletas.Count > 0)
+                {
+                    string queryEliminarFilasArchivoParcial = @"DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
+                    using (var cmdLimpieza = new NpgsqlCommand(queryEliminarFilasArchivoParcial, connection, transaction))
+                    {
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
+                        cmdLimpieza.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaLetra", facturaLetra);
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
+                        cmdLimpieza.ExecuteNonQuery();
+                    }
+                }
+
+                if (!encontrado)
+                {
+                    string queryCreacionRelacion = @"INSERT INTO relaciones
+                    (tipo_doc_origen, ptovta_origen, letra_origen, numero_origen, tipo_doc_destino, ptovta_destino, letra_destino, numero_destino)
+                    VALUES
+                    (@tipo_doc_origen, @ptovta_origen, @letra_origen, @numero_origen, @tipo_doc_destino, @ptovta_destino, @letra_destino, @numero_destino);";
+                    using (var cmdRelacion = new NpgsqlCommand(queryCreacionRelacion, connection, transaction))
+                    {
+                        cmdRelacion.Parameters.AddWithValue("@numero_origen", facturaNumero);
+                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_origen", facturaTipo);
+                        cmdRelacion.Parameters.AddWithValue("@letra_origen", facturaLetra);
+                        cmdRelacion.Parameters.AddWithValue("@ptovta_origen", facturaPuntoDeVenta);
+                        cmdRelacion.Parameters.AddWithValue("@letra_destino", letraDestino);
+                        cmdRelacion.Parameters.AddWithValue("@ptovta_destino", ptovtaDestino);
+                        cmdRelacion.Parameters.AddWithValue("@numero_destino", numeroDestino);
+                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_destino", tipoDeArchivo);
+                        cmdRelacion.ExecuteNonQuery();
+                    }
+                }
+
+                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnc", connection, transaction))
+                {
+                    cmdDelete.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        public void ProcesarGuardadoNotaDeDebito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
+        {
+            using var connection = new NpgsqlConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                string querySelect = "SELECT id_prestacion, motivorefactura, importerefactura, codigo, usuario, id_notadecredito, comentarios, tiporegistro FROM auxnd";
+                var filasAuxnd = new List<object[]>();
+                using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
+                using (var lector = cmdSelect.ExecuteReader())
+                {
+                    while (lector.Read())
+                    {
+                        filasAuxnd.Add(new object[] {
+                        lector["id_prestacion"], lector["motivorefactura"], lector["importerefactura"],
+                        lector["codigo"], lector["usuario"], lector["id_notadecredito"],
+                        lector["comentarios"], lector["tiporegistro"]
+                    });
+                    }
+                }
+
+                string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
+                var filasIncompletas = new HashSet<int>();
+                using (var cmdIncompletos = new NpgsqlCommand(querySelectIncompletos, connection, transaction))
+                {
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
+                    cmdIncompletos.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaLetra", facturaLetra);
+                    cmdIncompletos.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
+                    using (var lector = cmdIncompletos.ExecuteReader())
+                    {
+                        while (lector.Read())
+                            filasIncompletas.Add(Convert.ToInt32(lector["id_prestacion"]));
+                    }
+                }
+
+                bool encontrado = false;
+
+                string queryActualizarRegistros = @"UPDATE notadedebito 
+                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente
+                WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente;";
+
+                string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion;";
+
+                string queryUpsertNuevoRegistro = @"INSERT INTO notadedebito 
+                (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, tipo, letra, ptovta, numero, fecha, comentarios, tiporegistro, cargadocompletamente) 
+                VALUES 
+                (@id_notadecredito, @motivorefactura, @importerefactura, @codigo, @usuario, @id_prestacion, @tipo, @letra, @ptovta, @numero, @fecha, @comentarios, @tiporegistro, true)
+                ON CONFLICT (id_prestacion)
+                DO UPDATE SET
+                tipo = EXCLUDED.tipo, letra = EXCLUDED.letra, ptovta = EXCLUDED.ptovta, 
+                numero = EXCLUDED.numero, fecha = EXCLUDED.fecha, cargadocompletamente = true,
+                motivorefactura = EXCLUDED.motivorefactura, importerefactura = EXCLUDED.importerefactura, 
+                codigo = EXCLUDED.codigo, usuario = EXCLUDED.usuario, 
+                comentarios = EXCLUDED.comentarios, tiporegistro = EXCLUDED.tiporegistro;";
+
+                foreach (var fila in filasAuxnd)
+                {
+                    int idPrestacion = Convert.ToInt32(fila[0]);
+
+                    if (filasIncompletas.Contains(idPrestacion))
+                    {
+                        encontrado = true;
+                        using (var cmdUpdate = new NpgsqlCommand(queryActualizarRegistros, connection, transaction))
+                        {
+                            cmdUpdate.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                            cmdUpdate.Parameters.AddWithValue("@tipo", tipoDeArchivo);
+                            cmdUpdate.Parameters.AddWithValue("@letra", letraDestino);
+                            cmdUpdate.Parameters.AddWithValue("@ptovta", ptovtaDestino);
+                            cmdUpdate.Parameters.AddWithValue("@numero", numeroDestino);
+                            cmdUpdate.Parameters.AddWithValue("@fecha", fecha);
+                            cmdUpdate.Parameters.AddWithValue("@cargadocompletamente", true);
+                            cmdUpdate.Parameters.AddWithValue("@cargarcompletamente", false);
+                            cmdUpdate.ExecuteNonQuery();
+                        }
+
+                        using (var cmdDelInc = new NpgsqlCommand(queryDeleteIncompletos, connection, transaction))
+                        {
+                            cmdDelInc.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                            cmdDelInc.ExecuteNonQuery();
+                        }
+                    }
+                    else
+                    {
+                        using (var cmdUpsert = new NpgsqlCommand(queryUpsertNuevoRegistro, connection, transaction))
+                        {
+                            cmdUpsert.Parameters.AddWithValue("@id_prestacion", fila[0]);
+                            cmdUpsert.Parameters.AddWithValue("@motivorefactura", fila[1] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@importerefactura", fila[2] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@codigo", fila[3] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@usuario", fila[4] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@id_notadecredito", fila[5] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@comentarios", fila[6] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@tiporegistro", fila[7] ?? DBNull.Value);
+                            cmdUpsert.Parameters.AddWithValue("@letra", letraDestino);
+                            cmdUpsert.Parameters.AddWithValue("@ptovta", ptovtaDestino);
+                            cmdUpsert.Parameters.AddWithValue("@numero", numeroDestino);
+                            cmdUpsert.Parameters.AddWithValue("@fecha", fecha);
+                            cmdUpsert.Parameters.AddWithValue("@tipo", tipoDeArchivo);
+                            cmdUpsert.ExecuteNonQuery();
+                        }
+                    }
+                }
+
+                if (filasIncompletas.Count > 0)
+                {
+                    string queryEliminarFilasArchivoParcial = @"DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
+                    using (var cmdLimpieza = new NpgsqlCommand(queryEliminarFilasArchivoParcial, connection, transaction))
+                    {
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
+                        cmdLimpieza.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaLetra", facturaLetra);
+                        cmdLimpieza.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
+                        cmdLimpieza.ExecuteNonQuery();
+                    }
+                }
+
+                if (!encontrado)
+                {
+                    string queryCreacionRelacion = @"INSERT INTO relaciones
+                    (tipo_doc_origen, ptovta_origen, letra_origen, numero_origen, tipo_doc_destino, ptovta_destino, letra_destino, numero_destino)
+                    VALUES
+                    (@tipo_doc_origen, @ptovta_origen, @letra_origen, @numero_origen, @tipo_doc_destino, @ptovta_destino, @letra_destino, @numero_destino);";
+                    using (var cmdRelacion = new NpgsqlCommand(queryCreacionRelacion, connection, transaction))
+                    {
+                        cmdRelacion.Parameters.AddWithValue("@numero_origen", facturaNumero);
+                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_origen", facturaTipo);
+                        cmdRelacion.Parameters.AddWithValue("@letra_origen", facturaLetra);
+                        cmdRelacion.Parameters.AddWithValue("@ptovta_origen", facturaPuntoDeVenta);
+                        cmdRelacion.Parameters.AddWithValue("@letra_destino", letraDestino);
+                        cmdRelacion.Parameters.AddWithValue("@ptovta_destino", ptovtaDestino);
+                        cmdRelacion.Parameters.AddWithValue("@numero_destino", numeroDestino);
+                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_destino", tipoDeArchivo);
+                        cmdRelacion.ExecuteNonQuery();
+                    }
+                }
+
+                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnd", connection, transaction))
+                {
+                    cmdDelete.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
     }
 }

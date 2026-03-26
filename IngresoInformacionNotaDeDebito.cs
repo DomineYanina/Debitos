@@ -1,9 +1,11 @@
-﻿using Npgsql;
+﻿using Debitos.Repositories;
+using Npgsql;
 
 namespace Debitos
 {
     public partial class IngresoInformacionNotaDeDebito : Form
     {
+        private DebitosRepository _repository;
         private String letra = "";
         private String tipoDeArchivo = "";
         private int numeroE, puntoDeVentaE;
@@ -16,9 +18,7 @@ namespace Debitos
         private string _facturaLetra;
         private int _facturaPuntoDeVenta;
         private string _facturaTipo;
-        string queryDelete = "DELETE FROM auxnd";
-        NpgsqlConnection conexion = new NpgsqlConnection("Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;");
-
+        
         public IngresoInformacionNotaDeDebito(bool cargaACompletar, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
         {
             InitializeComponent();
@@ -28,6 +28,8 @@ namespace Debitos
             _facturaLetra = facturaLetra;
             _facturaPuntoDeVenta = facturaPuntoDeVenta;
             _facturaTipo = facturaTipo;
+            string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
+            _repository = new DebitosRepository(connectionString);
         }
 
         private void txtPuntoDeVenta_TextChanged_1(object sender, EventArgs e)
@@ -143,147 +145,20 @@ namespace Debitos
             fecha = dateTimePicker1.Value;
         }
 
-        private void btnGuardar_Click_1(object sender, EventArgs e)
+        private void btnGuardar_Click(object sender, EventArgs e)
         {
-
-            List<object[]> filasAuxnd = new List<object[]>();
-
-            using (conexion)
+            try
             {
-                conexion.Open();
-
-                // Selecciona registros de la tabla auxnd
-                string querySelect = "SELECT id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, comentarios, tiporegistro FROM auxnd";
-
-                using (NpgsqlCommand comandoSelect = new NpgsqlCommand(querySelect, conexion))
-                {
-                    using (NpgsqlDataReader lector = comandoSelect.ExecuteReader())
-                    {
-                        while (lector.Read())
-                        {
-                            filasAuxnd.Add(new object[]
-                            {
-                                lector["id_notadecredito"],
-                                lector["motivorefactura"],
-                                lector["importerefactura"],
-                                lector["codigo"],
-                                lector["usuario"],
-                                lector["id_prestacion"],
-                                lector["comentarios"],
-                                lector["tiporegistro"]
-                            });
-                        }
-                    }
-                }
-
-                // Consulta para obtener las filas incompletas
-                string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta 
-                                      WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento 
-                                      AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
-
-                List<object> filasIncompletas = new List<object>();
-
-                using (NpgsqlCommand comandoSelectIncompletos = new NpgsqlCommand(querySelectIncompletos, conexion))
-                {
-                    comandoSelectIncompletos.Parameters.AddWithValue("@FacturaNumero", _facturaNumero);
-                    comandoSelectIncompletos.Parameters.AddWithValue("@TipoDocumento", _facturaTipo);
-                    comandoSelectIncompletos.Parameters.AddWithValue("@FacturaLetra", _facturaLetra);
-                    comandoSelectIncompletos.Parameters.AddWithValue("@FacturaPuntoDeVenta", _facturaPuntoDeVenta);
-
-                    using (NpgsqlDataReader lectorIncompletos = comandoSelectIncompletos.ExecuteReader())
-                    {
-                        while (lectorIncompletos.Read())
-                        {
-                            filasIncompletas.Add(lectorIncompletos["id_prestacion"]);
-                        }
-                    }
-                }
-
-                foreach (var fila in filasAuxnd)
-                {
-                    object idPrestacion = fila[5];
-
-                    if (filasIncompletas.Contains(idPrestacion))
-                    {
-                        string queryActualizarRegistros = @"UPDATE notadedebito 
-                                                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente
-                                                WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente";
-
-                        using (NpgsqlCommand comandoActualizar = new NpgsqlCommand(queryActualizarRegistros, conexion))
-                        {
-                            comandoActualizar.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-                            comandoActualizar.Parameters.AddWithValue("@tipo", tipoDeArchivo);
-                            comandoActualizar.Parameters.AddWithValue("@letra", letra);
-                            comandoActualizar.Parameters.AddWithValue("@ptovta", puntoDeVentaE);
-                            comandoActualizar.Parameters.AddWithValue("@numero", numeroE);
-                            comandoActualizar.Parameters.AddWithValue("@fecha", fecha);
-                            comandoActualizar.Parameters.AddWithValue("@cargadocompletamente", true);
-                            comandoActualizar.Parameters.AddWithValue("@cargarcompletamente", false);
-
-                            comandoActualizar.ExecuteNonQuery();
-                        }
-
-                        string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion";
-
-                        using (NpgsqlCommand comandoDeleteIncompletos = new NpgsqlCommand(queryDeleteIncompletos, conexion))
-                        {
-                            comandoDeleteIncompletos.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-                            comandoDeleteIncompletos.ExecuteNonQuery();
-                        }
-                    }
-
-                    else
-                    {
-                        string queryInsertarNuevoRegistro = @"INSERT INTO notadedebito 
-                                                  (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, tipo, letra, ptovta, numero, fecha, id_prestacion, comentarios, tiporegistro) 
-                                                  VALUES 
-                                                  (@id_notadecredito, @motivorefactura, @importerefactura, @codigo, @usuario, @tipo, @letra, @ptovta, @numero, @fecha, @id_prestacion, @comentarios, @tiporegistro)";
-
-                        using (NpgsqlCommand comandoInsert = new NpgsqlCommand(queryInsertarNuevoRegistro, conexion))
-                        {
-                            comandoInsert.Parameters.AddWithValue("@id_notadecredito", fila[0]);
-                            comandoInsert.Parameters.AddWithValue("@motivorefactura", fila[1]);
-                            comandoInsert.Parameters.AddWithValue("@importerefactura", fila[2]);
-                            comandoInsert.Parameters.AddWithValue("@codigo", fila[3]);
-                            comandoInsert.Parameters.AddWithValue("@usuario", fila[4]);
-                            comandoInsert.Parameters.AddWithValue("@comentarios", fila[6]);
-                            comandoInsert.Parameters.AddWithValue("@tiporegistro", fila[7]);
-                            comandoInsert.Parameters.AddWithValue("@tipo", tipoDeArchivo);
-                            comandoInsert.Parameters.AddWithValue("@letra", letra);
-                            comandoInsert.Parameters.AddWithValue("@ptovta", puntoDeVentaE);
-                            comandoInsert.Parameters.AddWithValue("@numero", numeroE);
-                            comandoInsert.Parameters.AddWithValue("@fecha", fecha);
-                            comandoInsert.Parameters.AddWithValue("@id_prestacion", fila[5]);
-
-                            comandoInsert.ExecuteNonQuery();
-                        }
-                    }
-                }
-
-                // Eliminar registros de auxnd una vez procesados
-                using (NpgsqlCommand comandoDelete = new NpgsqlCommand("DELETE FROM auxnd", conexion))
-                {
-                    comandoDelete.ExecuteNonQuery();
-                }
-
-                if (filasIncompletas.Count > 0)
-                {
-                    string queryEliminarFilasArchivoParcial = @"DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
-                    using (NpgsqlCommand comandoLimpieza = new NpgsqlCommand(queryEliminarFilasArchivoParcial, conexion))
-                    {
-                        comandoLimpieza.Parameters.AddWithValue("@FacturaNumero", _facturaNumero);
-                        comandoLimpieza.Parameters.AddWithValue("@TipoDocumento", _facturaTipo);
-                        comandoLimpieza.Parameters.AddWithValue("@FacturaLetra", _facturaLetra);
-                        comandoLimpieza.Parameters.AddWithValue("@FacturaPuntoDeVenta", _facturaPuntoDeVenta);
-
-                        comandoLimpieza.ExecuteNonQuery();
-                    }
-                }
+                // Un solo llamado, cero SQL en el formulario
+                _repository.ProcesarGuardadoNotaDeDebito(tipoDeArchivo, letra, puntoDeVentaE, numeroE, fecha, _facturaNumero, _facturaLetra, _facturaPuntoDeVenta, _facturaTipo);
 
                 MessageBox.Show("Se ha creado correctamente la nota de débito");
-                IngresoInformacionNotaDeDebito.ActiveForm.Close();
+                this.Close();
             }
-
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al guardar la nota de débito: " + ex.Message);
+            }
         }
 
         private void comboTipoDeArchivo_SelectedIndexChanged(object sender, EventArgs e)

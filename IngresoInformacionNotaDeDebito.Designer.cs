@@ -51,7 +51,7 @@
             btnGuardar.TabIndex = 19;
             btnGuardar.Text = "Guardar";
             btnGuardar.UseVisualStyleBackColor = true;
-            btnGuardar.Click += btnGuardar_Click_1;
+            btnGuardar.Click += btnGuardar_Click;
             // 
             // label5
             // 
