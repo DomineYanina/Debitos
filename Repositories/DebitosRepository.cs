@@ -733,5 +733,124 @@ namespace Debitos.Repositories
                 throw;
             }
         }
+
+        // --- MÉTODOS PARA CAMBIO DE PRESTACIÓN ---
+        public DataTable ObtenerCodigosPrestacionUnicos()
+        {
+            var dt = new DataTable();
+            using var connection = new NpgsqlConnection(_connectionString);
+            string query = "SELECT DISTINCT codigo FROM amb_liquidado ORDER BY codigo ASC";
+            using var command = new NpgsqlCommand(query, connection);
+            using var adapter = new NpgsqlDataAdapter(command);
+            adapter.Fill(dt);
+            return dt;
+        }
+
+        public void InsertarCambiosPrestacionTemporal(string tipoDocumentoTransmitido, string codigoNuevo, List<int> idPrestaciones)
+        {
+            // Respetamos la lógica original de destinos temporales
+            string tablaDestino = tipoDocumentoTransmitido == "NC" ? "temporalnd" : "temporalnc";
+            string query = $"INSERT INTO {tablaDestino} (codigonuevo, idprestacion) VALUES (@codigoNuevo, @idPrestacion);";
+
+            using var connection = new NpgsqlConnection(_connectionString);
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                foreach (int idPrestacion in idPrestaciones)
+                {
+                    using var command = new NpgsqlCommand(query, connection, transaction);
+                    command.Parameters.AddWithValue("@codigoNuevo", codigoNuevo);
+                    command.Parameters.AddWithValue("@idPrestacion", idPrestacion);
+                    command.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        // --- MÉTODO PARA HISTORIAL DE DOCUMENTOS ---
+        public DataTable ObtenerHistorialDocumento(string tipo, string letra, int ptovta, int numero)
+        {
+            DataTable historial = new DataTable();
+            using var connection = new NpgsqlConnection(_connectionString);
+            connection.Open();
+
+            string tipoActual = tipo;
+            string letraActual = letra;
+            int ptovtaActual = ptovta;
+            int numeroActual = numero;
+
+            // 1. Buscar hacia atrás hasta encontrar la Factura original (FC)
+            while (tipoActual != "FC")
+            {
+                string queryAtras = "SELECT tipo_doc_origen, letra_origen, ptovta_origen, numero_origen FROM relaciones WHERE tipo_doc_destino = @tipo AND letra_destino = @letra AND ptovta_destino = @ptovta AND numero_destino = @numero";
+                using var cmd = new NpgsqlCommand(queryAtras, connection);
+                cmd.Parameters.AddWithValue("@tipo", tipoActual);
+                cmd.Parameters.AddWithValue("@letra", letraActual);
+                cmd.Parameters.AddWithValue("@ptovta", ptovtaActual);
+                cmd.Parameters.AddWithValue("@numero", numeroActual);
+
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    tipoActual = reader["tipo_doc_origen"].ToString();
+                    letraActual = reader["letra_origen"].ToString();
+                    ptovtaActual = Convert.ToInt32(reader["ptovta_origen"]);
+                    numeroActual = Convert.ToInt32(reader["numero_origen"]);
+                }
+                else
+                {
+                    break; // Cortamos si se rompe la cadena hacia atrás
+                }
+            }
+
+            // 2. Teniendo la FC (la raíz), buscamos hacia adelante armando la cadena completa
+            string queryAdelante = "SELECT * FROM relaciones WHERE tipo_doc_origen = @tipo AND letra_origen = @letra AND ptovta_origen = @ptovta AND numero_origen = @numero";
+            using var adapter = new NpgsqlDataAdapter(queryAdelante, connection);
+
+            bool hayMas = true;
+            var visitados = new HashSet<string>(); // Prevención de bucles infinitos en DB
+
+            while (hayMas)
+            {
+                string docId = $"{tipoActual}-{letraActual}-{ptovtaActual}-{numeroActual}";
+                if (visitados.Contains(docId)) break;
+                visitados.Add(docId);
+
+                adapter.SelectCommand.Parameters.Clear();
+                adapter.SelectCommand.Parameters.AddWithValue("@tipo", tipoActual);
+                adapter.SelectCommand.Parameters.AddWithValue("@letra", letraActual);
+                adapter.SelectCommand.Parameters.AddWithValue("@ptovta", ptovtaActual);
+                adapter.SelectCommand.Parameters.AddWithValue("@numero", numeroActual);
+
+                DataTable temp = new DataTable();
+                adapter.Fill(temp);
+
+                if (temp.Rows.Count > 0)
+                {
+                    if (historial.Columns.Count == 0)
+                        historial = temp.Clone();
+
+                    DataRow row = temp.Rows[0];
+                    historial.ImportRow(row);
+
+                    tipoActual = row["tipo_doc_destino"].ToString();
+                    letraActual = row["letra_destino"].ToString();
+                    ptovtaActual = Convert.ToInt32(row["ptovta_destino"]);
+                    numeroActual = Convert.ToInt32(row["numero_destino"]);
+                }
+                else
+                {
+                    hayMas = false;
+                }
+            }
+
+            return historial;
+        }
     }
 }
