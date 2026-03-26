@@ -38,6 +38,8 @@ namespace Debitos.Presenters
                     return;
                 }
 
+                _view.TipoRegistroFiltrado = tipoRegistro;
+
                 // 2. Definir el comando SQL según el tipo (Esto simplifica tu método ConfigurarComandosYFiltrosPorTipoRegistro)
                 string comandoSql = GenerarComandoSql(_view.FacturaTipo, tipoRegistro);
 

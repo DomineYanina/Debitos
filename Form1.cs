@@ -75,7 +75,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     public bool cargaCompletada = true;
     public bool cargaACompletar = true;
 
-    protected string TipoRegistroFiltrado = "";
+    public string TipoRegistroFiltrado { get; set; } = "";
     protected string GrupoPrestacion = "";
     protected string Paciente = "";
     protected string Profesional = "";
@@ -2945,68 +2945,43 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             dataTableActual = bs.DataSource as DataTable;
         else if (dataGridView1.DataSource is DataTable dt)
             dataTableActual = dt;
-        // 1. Usa la función Select para filtrar solo las filas relevantes
-        //    Esto es mucho más rápido que recorrer toda la grilla.
+
+        if (dataTableActual == null) return;
+
+        // CORRECCIÓN: Ahora incluimos explícitamente el Debito Aceptado y evitamos bugs con NULL
         DataRow[] filasFiltradas = dataTableActual.Select(
-            "NC_MotivoDeRefactura <> '' OR NC_MotivoDeDebito <> ''"
+            "(NC_MotivoDeRefactura IS NOT NULL AND NC_MotivoDeRefactura <> '') OR " +
+            "(NC_MotivoDeDebito IS NOT NULL AND NC_MotivoDeDebito <> '') OR " +
+            "(NC_DebitoAceptado = True)"
         );
 
-        // 2. Itera únicamente sobre el subconjunto de filas filtradas
         foreach (DataRow row in filasFiltradas)
         {
             int idPrestacion = Convert.ToInt32(row["id_prestacion"]);
-
-            object motivoRefactura = row["NC_MotivoDeRefactura"] != DBNull.Value
-                ? row["NC_MotivoDeRefactura"]
-                : "";
-
-            object motivoDebito = row["NC_MotivoDeDebito"] != DBNull.Value
-                ? row["NC_MotivoDeDebito"]
-                : "";
-
-            double? importeRefactura = row["NC_ImporteDeRefactura"] != DBNull.Value
-                ? Convert.ToDouble(row["NC_ImporteDeRefactura"])
-                : (double?)null;
-
-            double? importeDebito = row["NC_ImporteDebitado"] != DBNull.Value
-                ? Convert.ToDouble(row["NC_ImporteDebitado"])
-                : (double?)null;
-
-            string? comentarios = row["NC_Comentarios"] != DBNull.Value
-                      ? row["NC_Comentarios"].ToString().Replace('\0', ' ').Trim() // Reemplazar \0 por un espacio
-                      : "";
-
-            bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value &&
-                                  Convert.ToBoolean(row["NC_DebitoAceptado"]);
-
+            object motivoRefactura = row["NC_MotivoDeRefactura"] != DBNull.Value ? row["NC_MotivoDeRefactura"] : "";
+            object motivoDebito = row["NC_MotivoDeDebito"] != DBNull.Value ? row["NC_MotivoDeDebito"] : "";
+            double? importeRefactura = row["NC_ImporteDeRefactura"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDeRefactura"]) : (double?)null;
+            double? importeDebito = row["NC_ImporteDebitado"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDebitado"]) : (double?)null;
+            string? comentarios = row["NC_Comentarios"] != DBNull.Value ? row["NC_Comentarios"].ToString().Replace('\0', ' ').Trim() : "";
+            bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
             object diasFacturados = DBNull.Value;
+
             if (FacturaTipo != "NC" && row["NC_DiasFacturados"] != DBNull.Value)
-            {
                 diasFacturados = Convert.ToInt32(row["NC_DiasFacturados"]);
-            }
 
             string prestacionEnglobante = row["NC_PrestacionEnglobante"] != DBNull.Value ? row["NC_PrestacionEnglobante"].ToString() : "";
-
             string codigo = string.Empty;
+
             if (FacturaTipo == "ND" && row["codigo"] != DBNull.Value)
-            {
                 codigo = row["codigo"].ToString();
-            }
 
-            // Buscar si ya existe en la lista de valores para borrado de filtros
-            // Nota: Se puede optimizar esta parte con un Dictionary si la lista es grande
             int index = listaValoresParaBorradoDeFiltros.FindIndex(x => x.idPrestacion == idPrestacion);
-
             var nuevoElemento = (idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito, comentarios, debitoAceptado, diasFacturados, prestacionEnglobante, codigo);
 
             if (index == -1)
-            {
                 listaValoresParaBorradoDeFiltros.Add(nuevoElemento);
-            }
             else
-            {
                 listaValoresParaBorradoDeFiltros[index] = nuevoElemento;
-            }
         }
     }
 
@@ -3168,84 +3143,40 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void GuardarValoresAntesDeDeshacerFiltroND()
     {
-        // Obtener el DataTable que actúa como fuente de datos del DataGridView.
-        // Esto es mucho más eficiente que recorrer las filas de la UI.
-        DataTable? dataTableActual = null;
+        DataTable dataTableActual = null;
         if (dataGridView1.DataSource is BindingSource bs)
-        {
             dataTableActual = bs.DataSource as DataTable;
-        }
         else if (dataGridView1.DataSource is DataTable dt)
-        {
             dataTableActual = dt;
-        }
 
-        if (dataTableActual == null)
-        {
-            // Si no se encuentra un DataTable, no podemos continuar.
-            return;
-        }
+        if (dataTableActual == null) return;
 
-        // Usar Select para filtrar las filas que cumplen la condición original
-        // del método. Esto es más rápido que un bucle 'foreach'.
         DataRow[] filasFiltradas = dataTableActual.Select(
-            "NC_MotivoDeRefactura IS NOT NULL AND NC_MotivoDeRefactura <> '' OR " +
-            "NC_MotivoDeDebito IS NOT NULL AND NC_MotivoDeDebito <> ''"
+            "(NC_MotivoDeRefactura IS NOT NULL AND NC_MotivoDeRefactura <> '') OR " +
+            "(NC_MotivoDeDebito IS NOT NULL AND NC_MotivoDeDebito <> '') OR " +
+            "(NC_DebitoAceptado = True)"
         );
 
-        // Iterar solo sobre el subconjunto de filas filtradas.
         foreach (DataRow row in filasFiltradas)
         {
             int idPrestacion = Convert.ToInt32(row["id_prestacion"]);
-
-            object motivoRefactura = row["NC_MotivoDeRefactura"] != DBNull.Value
-                ? row["NC_MotivoDeRefactura"]
-                : "";
-
-            object motivoDebito = row["NC_MotivoDeDebito"] != DBNull.Value
-                ? row["NC_MotivoDeDebito"]
-                : "";
-
-            double? importeRefactura = row["NC_ImporteDeRefactura"] != DBNull.Value
-                ? Convert.ToDouble(row["NC_ImporteDeRefactura"])
-                : (double?)null;
-
-            double? importeDebito = row["NC_ImporteDebitado"] != DBNull.Value
-                ? Convert.ToDouble(row["NC_ImporteDebitado"])
-                : (double?)null;
-
-            string? comentarios = row["NC_Comentarios"] != DBNull.Value
-                      ? row["NC_Comentarios"].ToString().Replace("\0", "") // Eliminar el caracter nulo
-                      : "";
-
-            bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value &&
-                                  Convert.ToBoolean(row["NC_DebitoAceptado"]);
-
-            object diasFacturados = row["NC_DiasFacturados"] != DBNull.Value
-                ? Convert.ToInt32(row["NC_DiasFacturados"])
-                : (object)DBNull.Value;
-
+            object motivoRefactura = row["NC_MotivoDeRefactura"] != DBNull.Value ? row["NC_MotivoDeRefactura"] : "";
+            object motivoDebito = row["NC_MotivoDeDebito"] != DBNull.Value ? row["NC_MotivoDeDebito"] : "";
+            double? importeRefactura = row["NC_ImporteDeRefactura"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDeRefactura"]) : (double?)null;
+            double? importeDebito = row["NC_ImporteDebitado"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDebitado"]) : (double?)null;
+            string? comentarios = row["NC_Comentarios"] != DBNull.Value ? row["NC_Comentarios"].ToString().Replace("\0", "") : "";
+            bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
+            object diasFacturados = row["NC_DiasFacturados"] != DBNull.Value ? Convert.ToInt32(row["NC_DiasFacturados"]) : (object)DBNull.Value;
             string? prestacionEnglobante = row["NC_PrestacionEnglobante"] != DBNull.Value ? row["NC_PrestacionEnglobante"].ToString() : "";
-
-            // En el código original se usa id para idNotaDeDebito, respetamos el nombre del campo.
             int? idNotaDeDebito = Convert.ToInt32(row["id"]);
 
-            // Buscar si ya existe el elemento en la lista.
             int index = listaValoresParaBorradoDeFiltrosND.FindIndex(x => x.idPrestacion == idPrestacion);
-
-            // Se crea la tupla con los valores extraídos.
             var nuevoElemento = (idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito, comentarios, debitoAceptado, diasFacturados, prestacionEnglobante, idNotaDeDebito);
 
             if (index == -1)
-            {
-                // Si el elemento no existe, se añade.
                 listaValoresParaBorradoDeFiltrosND.Add(nuevoElemento);
-            }
             else
-            {
-                // Si ya existe, se actualiza en su posición.
                 listaValoresParaBorradoDeFiltrosND[index] = nuevoElemento;
-            }
         }
     }
 

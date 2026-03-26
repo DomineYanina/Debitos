@@ -11,6 +11,8 @@ namespace Debitos.Views
         int FacturaPuntoDeVenta { get; }
         int FacturaNumero { get; }
 
+        string TipoRegistroFiltrado { get; set; }
+
         // Propiedades para mostrar datos (lo que el presentador le manda a la vista)
         DataTable DatosGrilla { get; set; }
         bool BotonBuscarVisible { get; set; }

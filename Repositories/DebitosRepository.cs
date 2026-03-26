@@ -392,7 +392,6 @@ namespace Debitos.Repositories
 
             try
             {
-                // 1. Extraemos los registros temporales
                 string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro FROM auxnc";
                 var filasAuxnc = new List<object[]>();
                 using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
@@ -409,7 +408,6 @@ namespace Debitos.Repositories
                     }
                 }
 
-                // 2. Extraemos los incompletos
                 string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
                 var filasIncompletas = new HashSet<int>();
                 using (var cmdIncompletos = new NpgsqlCommand(querySelectIncompletos, connection, transaction))
@@ -427,8 +425,12 @@ namespace Debitos.Repositories
 
                 bool encontrado = false;
 
+                // CORRECCIÓN: Ahora actualizamos toda la información de auditoría y el tiporegistro
                 string queryActualizarRegistros = @"UPDATE notadecredito 
-                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente
+                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente,
+                motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, 
+                debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, 
+                prestacionenglobante = @prestacionenglobante, usuario = @usuario, comentarios = @comentarios, tiporegistro = @tiporegistro
                 WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente;";
 
                 string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion;";
@@ -447,7 +449,6 @@ namespace Debitos.Repositories
                 prestacionenglobante = EXCLUDED.prestacionenglobante, usuario = EXCLUDED.usuario, 
                 comentarios = EXCLUDED.comentarios, tiporegistro = EXCLUDED.tiporegistro;";
 
-                // 3. Procesamos las prestaciones 
                 foreach (var fila in filasAuxnc)
                 {
                     int idPrestacion = Convert.ToInt32(fila[0]);
@@ -465,6 +466,19 @@ namespace Debitos.Repositories
                             cmdUpdate.Parameters.AddWithValue("@fecha", fecha);
                             cmdUpdate.Parameters.AddWithValue("@cargadocompletamente", true);
                             cmdUpdate.Parameters.AddWithValue("@cargarcompletamente", false);
+
+                            // Agregamos los parámetros que faltaban
+                            cmdUpdate.Parameters.AddWithValue("@motivodedebito", fila[1] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@diasfacturados", fila[2] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@importedebitado", fila[3] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@debitoaceptado", fila[4]);
+                            cmdUpdate.Parameters.AddWithValue("@motivoderefactura", fila[5] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@importederefactura", fila[6] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@prestacionenglobante", fila[7] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@usuario", fila[8] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@comentarios", fila[9] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@tiporegistro", fila[10] ?? DBNull.Value);
+
                             cmdUpdate.ExecuteNonQuery();
                         }
 
@@ -499,7 +513,6 @@ namespace Debitos.Repositories
                     }
                 }
 
-                // 4. Ejecutamos la limpieza una sola vez fuera del bucle
                 if (filasIncompletas.Count > 0)
                 {
                     string queryEliminarFilasArchivoParcial = @"DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
@@ -588,7 +601,9 @@ namespace Debitos.Repositories
                 bool encontrado = false;
 
                 string queryActualizarRegistros = @"UPDATE notadedebito 
-                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente
+                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente,
+                motivorefactura = @motivorefactura, importerefactura = @importerefactura, codigo = @codigo, usuario = @usuario, 
+                comentarios = @comentarios, tiporegistro = @tiporegistro
                 WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente;";
 
                 string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion;";
@@ -622,6 +637,14 @@ namespace Debitos.Repositories
                             cmdUpdate.Parameters.AddWithValue("@fecha", fecha);
                             cmdUpdate.Parameters.AddWithValue("@cargadocompletamente", true);
                             cmdUpdate.Parameters.AddWithValue("@cargarcompletamente", false);
+
+                            cmdUpdate.Parameters.AddWithValue("@motivorefactura", fila[1] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@importerefactura", fila[2] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@codigo", fila[3] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@usuario", fila[4] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@comentarios", fila[6] ?? DBNull.Value);
+                            cmdUpdate.Parameters.AddWithValue("@tiporegistro", fila[7] ?? DBNull.Value);
+
                             cmdUpdate.ExecuteNonQuery();
                         }
 
