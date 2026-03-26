@@ -1189,29 +1189,60 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblMontosNoAceptados.Text = "Suma total de débitos a refacturar: " + sumaNoAceptados;
         lblMontosNoAceptados.Visible = true;
     }
-
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargarSoloFiltroMotivoDebito == false)
         {
             if (filtroMotivoDebito.SelectedIndex != -1)
             {
-                // Obtenemos el motivo seleccionado
                 string motivoDebito = filtroMotivoDebito.SelectedItem.ToString();
 
-                // Iteramos sobre TODAS las celdas seleccionadas, igual que en el filtroMotivoDeRefactura
+                // 1. Verificamos si alguna de las celdas seleccionadas ya tiene un motivo asignado
+                bool hayMotivosPrevios = false;
                 foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
                 {
                     var row = dataGridView1.Rows[cell.RowIndex];
-                    row.Cells["NC_MotivoDeDebito"].Value = motivoDebito;
-                    row.Cells["NC_DebitoAceptado"].Value = false; // Automáticamente se marca que no es un débito aceptado
+                    string motivoActual = row.Cells["NC_MotivoDeDebito"].Value?.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(motivoActual))
+                    {
+                        hayMotivosPrevios = true;
+                        break; // Apenas encontramos uno, detenemos la búsqueda
+                    }
+                }
+
+                bool reemplazarMotivosPrevios = false;
+
+                // 2. Si encontramos motivos previos, pedimos confirmación al usuario
+                if (hayMotivosPrevios)
+                {
+                    DialogResult resultado = MessageBox.Show(
+                        "Algunas de las prestaciones seleccionadas ya tienen un motivo de débito asignado. ¿Desea reemplazarlo?\n\nSeleccione 'Sí' para reemplazar todos, o 'No' para aplicar el motivo solo a las celdas vacías.",
+                        "Confirmación de reemplazo",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+
+                    reemplazarMotivosPrevios = (resultado == DialogResult.Yes);
+                }
+
+                // 3. Iteramos nuevamente para aplicar el valor según la decisión tomada
+                foreach (DataGridViewCell cell in dataGridView1.SelectedCells)
+                {
+                    var row = dataGridView1.Rows[cell.RowIndex];
+                    string motivoActual = row.Cells["NC_MotivoDeDebito"].Value?.ToString();
+
+                    // Aplicamos el nuevo motivo si la celda está vacía, o si el usuario eligió sobreescribir todo
+                    if (string.IsNullOrWhiteSpace(motivoActual) || reemplazarMotivosPrevios)
+                    {
+                        row.Cells["NC_MotivoDeDebito"].Value = motivoDebito;
+                    }
                 }
 
                 checkMotivoDebito.Checked = false;
                 filtroMotivoDebito.SelectedItem = null;
                 GuardarValoresParaActualizarMontoAuditados();
 
-                // Es importante detener la edición para que el valor "quede fijado" en la grilla visual
+                // Es importante detener la edición para que el valor quede fijado visualmente
                 dataGridView1.EndEdit();
                 contarFilasConDebitoAceptado();
             }
