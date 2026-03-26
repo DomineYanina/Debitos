@@ -119,30 +119,12 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     protected bool algunFiltro = false;
     protected bool debitoIndividual = false;
 
-    protected DataTable auxiliar = new DataTable();
-    protected DataTable filtros = new DataTable();
-    protected DataTable tablaAMostrar = new DataTable();
-    protected DataTable prueba = new DataTable();
-    protected DataTable dataTablePaciente = new DataTable();
-    protected DataTable aUsarParaLimpiarFiltroAnterior = new DataTable();
-    protected DataTable tablaCompletaSinFiltros = new DataTable();
-    protected DataTable filtroPacienteSinFiltros = new DataTable();
-    protected DataTable filtroFechaSinFiltros = new DataTable();
-    protected DataTable filtroMedicoSinFiltros = new DataTable();
-    protected DataTable filtroPrestacionSinFiltros = new DataTable();
-    protected DataTable filtroModuloSinFiltros = new DataTable();
-    protected DataTable filtroNumeroDeInternacionSinFiltros = new DataTable();
-    protected DataTable filtroNumeroDeInternacionTabla = new DataTable();
-    protected DataTable auxFiltros = new DataTable();
-
     private DataTable filtroPacienteOriginal;
     private DataTable filtroPrestacionOriginal;
     private DataTable filtroMedicoOriginal;
     private DataTable filtroModuloOriginal;
     private DataTable filtroNumeroDeInternacionOriginal;
     private DataTable filtroFechaOriginal;
-
-    private DataTable tablaSinFiltro;
 
     public List<string> ordenFiltros = new List<string>();
     public List<DataTable> tablasFiltradas = new List<DataTable>();
@@ -343,20 +325,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         btnBorrarImporteDebito.Visible = false;
         btnBorrarImporteRefactura.Visible = false;
 
-        auxiliar.Clear();
-        filtros.Clear();
-        tablaAMostrar.Clear();
-        prueba.Clear();
-        dataTablePaciente.Clear();
-        aUsarParaLimpiarFiltroAnterior.Clear();
-        tablaCompletaSinFiltros.Clear();
-        filtroPacienteSinFiltros.Clear();
-        filtroFechaSinFiltros.Clear();
-        filtroMedicoSinFiltros.Clear();
-        filtroPrestacionSinFiltros.Clear();
-        filtroModuloSinFiltros.Clear();
-        filtroNumeroDeInternacionSinFiltros.Clear();
-
         tablasFiltradas.Clear();
 
         condicionesFiltro = "";
@@ -495,16 +463,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         filtroNumeroDeInternacionOriginal = (DataTable)filtroNumeroDeInternacion.DataSource;
         filtroFechaOriginal = comboFiltroFecha.DataSource as DataTable;
 
-        tablaCompletaSinFiltros = datos.Copy();
-        tablaSinFiltro = datos.Copy();
-        auxFiltros = datos.Copy();
-
-        filtroPacienteSinFiltros = filtroPacienteOriginal;
-        filtroMedicoSinFiltros = filtroMedicoOriginal;
-        filtroPrestacionSinFiltros = filtroPrestacionOriginal;
-        filtroModuloSinFiltros = filtroModuloOriginal;
-        filtroNumeroDeInternacionSinFiltros = filtroNumeroDeInternacionOriginal;
-
         // EL DESBLOQUEO CRÍTICO: Esto vuelve a habilitar los clics del usuario
         cargaListaPaciente = false;
         cargaListaProfesional = false;
@@ -544,30 +502,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         lblModulo.TextAlign = ContentAlignment.TopLeft;
         lblModulo.Text = "Módulo";
-    }
-
-    private void RecargarFiltrosYDatos()
-    {
-        tablaAMostrar = tablasFiltros[0];
-        dataGridView1.DataSource = tablaAMostrar;
-        filtroPaciente.DataSource = filtroPacienteSinFiltros;
-        filtroPrestacion.DataSource = filtroPrestacionSinFiltros;
-        filtroProfesional.DataSource = filtroMedicoSinFiltros;
-        filtroModulo.DataSource = filtroModuloSinFiltros;
-        filtroNumeroDeInternacion.DataSource = filtroNumeroDeInternacionSinFiltros;
-        tablasFiltrosMedico.Clear();
-        tablasFiltrosPaciente.Clear();
-        tablasFiltrosPrestacion.Clear();
-        tablasFiltrosModulo.Clear();
-        tablasFiltrosMedico.Add(filtroMedicoSinFiltros);
-        tablasFiltrosPaciente.Add(filtroPacienteSinFiltros);
-        tablasFiltrosPrestacion.Add(filtroPrestacionSinFiltros);
-        tablasFiltrosModulo.Add(filtroModuloSinFiltros);
-        if (TipoRegistroFiltrado == "Internados")
-        {
-            filtroNumeroDeInternacion.Visible = true;
-        }
-        dataGridView1.Refresh();
     }
 
     private void RestaurarColoresPorTipoFactura()
@@ -2456,7 +2390,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         FacturaPuntoDeVentaSeleccionado = false;
         FacturaTipoSeleccionado = false;
 
-        tablaAMostrar.Clear();
         lblCantidadDeRegistrosConDebitoAceptado.Visible = false;
         lblCantidadDeRegistrosFiltrados.Visible = false;
     }
@@ -2813,17 +2746,16 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         tablasFiltrosPaciente.Clear();
         tablasFiltrosPrestacion.Clear();
         tablasFiltrosModulo.Clear();
-        tablaAMostrar.Clear();
-        tablaAMostrar.Rows.Clear();
-        tablaAMostrar.Columns.Clear();
+
+        // Simplemente desconectamos la grilla
+        dataGridView1.DataSource = null;
+
         FacturaTipo = "";
         FacturaLetra = "";
         FacturaPuntoDeVenta = 0;
         FacturaNumero = 0;
-        dataGridView1.DataSource = tablaAMostrar;
 
         button1.Visible = false;
-
         SetControlesVisibles(false);
 
         cargaListaPaciente = true;
@@ -2838,15 +2770,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         cargaLista = false;
         cargarSoloFiltroMotivoDebito = false;
-
-        dataTablePaciente.Clear();
-        aUsarParaLimpiarFiltroAnterior.Clear();
-        tablaCompletaSinFiltros.Clear();
-        filtroPacienteSinFiltros.Clear();
-        filtroMedicoSinFiltros.Clear();
-        filtroPrestacionSinFiltros.Clear();
-        filtroModuloSinFiltros.Clear();
-
 
         letra.Text = "";
         numero.Text = "";
