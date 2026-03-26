@@ -68,20 +68,22 @@ namespace Debitos.Repositories
             return ExecuteQuery(comandoSqlServer, parameters);
         }
 
-        public void LimpiarAuxiliarNC()
+        public void LimpiarAuxiliarNC(string usuario)
         {
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
-            using var comando = new NpgsqlCommand("DELETE FROM auxnc", connection);
-            comando.ExecuteNonQuery();
+            using var command = new NpgsqlCommand("DELETE FROM auxnc WHERE usuario = @usuario", connection);
+            command.Parameters.AddWithValue("@usuario", usuario);
+            command.ExecuteNonQuery();
         }
 
-        public void LimpiarAuxiliarND()
+        public void LimpiarAuxiliarND(string usuario)
         {
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
-            using var comando = new NpgsqlCommand("DELETE FROM auxnd", connection);
-            comando.ExecuteNonQuery();
+            using var command = new NpgsqlCommand("DELETE FROM auxnd WHERE usuario = @usuario", connection);
+            command.Parameters.AddWithValue("@usuario", usuario);
+            command.ExecuteNonQuery();
         }
 
         public void InsertarAuxiliarNC_FC(List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, string? codigo)> lista, string usuario, string tipoRegistro)
@@ -384,7 +386,7 @@ namespace Debitos.Repositories
             }
         }
 
-        public void ProcesarGuardadoNotaDeCredito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
+        public void ProcesarGuardadoNotaDeCredito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo, string usuarioAuditor)
         {
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
@@ -392,21 +394,25 @@ namespace Debitos.Repositories
 
             try
             {
-                string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro FROM auxnc";
+                string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro FROM auxnc WHERE usuario = @usuarioAuditor";
                 var filasAuxnc = new List<object[]>();
                 using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
-                using (var lector = cmdSelect.ExecuteReader())
                 {
-                    while (lector.Read())
+                    cmdSelect.Parameters.AddWithValue("@usuarioAuditor", usuarioAuditor);
+                    using (var lector = cmdSelect.ExecuteReader())
                     {
-                        filasAuxnc.Add(new object[] {
+                        while (lector.Read())
+                        {
+                            filasAuxnc.Add(new object[] {
                         lector["id_prestacion"], lector["motivodedebito"], lector["diasfacturados"],
                         lector["importedebitado"], lector["debitoaceptado"], lector["motivoderefactura"],
                         lector["importederefactura"], lector["prestacionenglobante"], lector["usuario"],
                         lector["comentarios"], lector["tiporegistro"]
                     });
+                        }
                     }
                 }
+                
 
                 string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
                 var filasIncompletas = new HashSet<int>();
@@ -546,8 +552,9 @@ namespace Debitos.Repositories
                     }
                 }
 
-                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnc", connection, transaction))
+                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnc WHERE usuario = @usuarioAuditor", connection, transaction))
                 {
+                    cmdDelete.Parameters.AddWithValue("@usuarioAuditor", usuarioAuditor);
                     cmdDelete.ExecuteNonQuery();
                 }
 
@@ -560,7 +567,7 @@ namespace Debitos.Repositories
             }
         }
 
-        public void ProcesarGuardadoNotaDeDebito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
+        public void ProcesarGuardadoNotaDeDebito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo, string usuarioAuditor)
         {
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
@@ -568,18 +575,21 @@ namespace Debitos.Repositories
 
             try
             {
-                string querySelect = "SELECT id_prestacion, motivorefactura, importerefactura, codigo, usuario, id_notadecredito, comentarios, tiporegistro FROM auxnd";
+                string querySelect = "SELECT id_prestacion, motivorefactura, importerefactura, codigo, usuario, id_notadecredito, comentarios, tiporegistro FROM auxnd WHERE usuario = @usuarioAuditor";
                 var filasAuxnd = new List<object[]>();
                 using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
-                using (var lector = cmdSelect.ExecuteReader())
                 {
-                    while (lector.Read())
+                    cmdSelect.Parameters.AddWithValue("@usuarioAuditor", usuarioAuditor);
+                    using (var lector = cmdSelect.ExecuteReader())
                     {
-                        filasAuxnd.Add(new object[] {
+                        while (lector.Read())
+                        {
+                            filasAuxnd.Add(new object[] {
                         lector["id_prestacion"], lector["motivorefactura"], lector["importerefactura"],
                         lector["codigo"], lector["usuario"], lector["id_notadecredito"],
                         lector["comentarios"], lector["tiporegistro"]
                     });
+                        }
                     }
                 }
 
@@ -709,8 +719,9 @@ namespace Debitos.Repositories
                     }
                 }
 
-                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnd", connection, transaction))
+                using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnd WHERE usuario = @usuarioAuditor", connection, transaction))
                 {
+                    cmdDelete.Parameters.AddWithValue("@usuarioAuditor", usuarioAuditor);
                     cmdDelete.ExecuteNonQuery();
                 }
 

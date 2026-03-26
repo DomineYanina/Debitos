@@ -234,8 +234,8 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         prestacionFiltro = string.Empty;
         profesionalFiltro = string.Empty;
         grupoPrestacionFiltro = string.Empty;
-        ingresoInformacionNotaDeCredito = new IngresoInformacionNotaDeCredito(false, 0, string.Empty, 0, string.Empty);
-        ingresoInformacionNotaDeDebito = new IngresoInformacionNotaDeDebito(false, 0, string.Empty, 0, string.Empty);
+        ingresoInformacionNotaDeCredito = new IngresoInformacionNotaDeCredito(false, 0, string.Empty, 0, string.Empty, usuario);
+        ingresoInformacionNotaDeDebito = new IngresoInformacionNotaDeDebito(false, 0, string.Empty, 0, string.Empty, usuario);
         verHistorialDelDocumento = new VerHistorialDelDocumento(0, string.Empty, 0, string.Empty);
 
         // UI element visibility settings  
@@ -2390,7 +2390,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnNuevaNotaDeCrédito_Click(object sender, EventArgs e)
     {
-        _repository.LimpiarAuxiliarNC();
+        _repository.LimpiarAuxiliarNC(usuario);
 
         switch (FacturaTipo)
         {
@@ -2415,7 +2415,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private void AbrirFormularioNotaDeCredito()
     {
         ingresoInformacionNotaDeCredito = new IngresoInformacionNotaDeCredito(
-            cargaACompletar, FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo);
+            cargaACompletar, FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo, usuario);
         ingresoInformacionNotaDeCredito.Show();
     }
 
@@ -2423,7 +2423,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private void btnNuevaNotaDeDébito_Click(object sender, EventArgs e)
     {
         GuardarValoresAntesDeDeshacerFiltroNC();
-        _repository.LimpiarAuxiliarND();
+        _repository.LimpiarAuxiliarND(usuario);
         _repository.InsertarAuxiliarND(listaValoresParaBorradoDeFiltrosNC, usuario, TipoRegistroFiltrado);
 
         AbrirFormularioNotaDeDebito();
@@ -2437,7 +2437,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private void AbrirFormularioNotaDeDebito()
     {
         ingresoInformacionNotaDeDebito = new IngresoInformacionNotaDeDebito(
-            cargaACompletar, FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo);
+            cargaACompletar, FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo, usuario);
         ingresoInformacionNotaDeDebito.Show();
     }
 

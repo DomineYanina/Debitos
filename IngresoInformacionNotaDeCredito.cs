@@ -7,6 +7,7 @@ namespace Debitos
     public partial class IngresoInformacionNotaDeCredito : Form
     {
         private DebitosRepository _repository;
+        private string _usuarioActual;
         private String letra = "";
         private String tipoDeArchivo = "";
         private int numeroE, puntoDeVentaE;
@@ -19,9 +20,10 @@ namespace Debitos
         private int _facturaPuntoDeVenta;
         private String _facturaTipo;
 
-        public IngresoInformacionNotaDeCredito(bool cargaACompletar, int facturaNumero, String facturaLetra, int facturaPuntoDeVenta, String facturaTipo)
+        public IngresoInformacionNotaDeCredito(bool cargaACompletar, int facturaNumero, String facturaLetra, int facturaPuntoDeVenta, String facturaTipo, string usuarioActual)
         {
             InitializeComponent();
+            _usuarioActual = usuarioActual;
             _cargaACompletar = cargaACompletar;
             _facturaNumero = facturaNumero;
             _facturaLetra = facturaLetra;
@@ -146,7 +148,7 @@ namespace Debitos
             try
             {
                 // Un solo llamado, cero SQL en el formulario
-                _repository.ProcesarGuardadoNotaDeCredito(tipoDeArchivo, letra, puntoDeVentaE, numeroE, fecha, _facturaNumero, _facturaLetra, _facturaPuntoDeVenta, _facturaTipo);
+                _repository.ProcesarGuardadoNotaDeCredito(tipoDeArchivo, letra, puntoDeVentaE, numeroE, fecha, _facturaNumero, _facturaLetra, _facturaPuntoDeVenta, _facturaTipo, _usuarioActual);
 
                 MessageBox.Show("Se ha creado correctamente la nota de crédito");
                 this.Close();

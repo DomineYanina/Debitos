@@ -6,6 +6,7 @@ namespace Debitos
     public partial class IngresoInformacionNotaDeDebito : Form
     {
         private DebitosRepository _repository;
+        private string _usuarioActual;
         private String letra = "";
         private String tipoDeArchivo = "";
         private int numeroE, puntoDeVentaE;
@@ -19,9 +20,10 @@ namespace Debitos
         private int _facturaPuntoDeVenta;
         private string _facturaTipo;
         
-        public IngresoInformacionNotaDeDebito(bool cargaACompletar, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo)
+        public IngresoInformacionNotaDeDebito(bool cargaACompletar, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo, string usuarioActual)
         {
             InitializeComponent();
+            _usuarioActual = usuarioActual;
             btnGuardar.Visible = false;
             fecha = dateTimePicker1.Value;
             _facturaNumero = facturaNumero;
@@ -150,7 +152,7 @@ namespace Debitos
             try
             {
                 // Un solo llamado, cero SQL en el formulario
-                _repository.ProcesarGuardadoNotaDeDebito(tipoDeArchivo, letra, puntoDeVentaE, numeroE, fecha, _facturaNumero, _facturaLetra, _facturaPuntoDeVenta, _facturaTipo);
+                _repository.ProcesarGuardadoNotaDeDebito(tipoDeArchivo, letra, puntoDeVentaE, numeroE, fecha, _facturaNumero, _facturaLetra, _facturaPuntoDeVenta, _facturaTipo, _usuarioActual);
 
                 MessageBox.Show("Se ha creado correctamente la nota de débito");
                 this.Close();
