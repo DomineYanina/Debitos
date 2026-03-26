@@ -2523,53 +2523,86 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnExportar_Click_1(object sender, EventArgs e)
     {
-        // Crear un nuevo libro de trabajo de Excel
-        using (XLWorkbook workbook = new XLWorkbook())
+        if (dataGridView1.Rows.Count == 0)
         {
-            // Agregar una nueva hoja de trabajo
-            IXLWorksheet worksheet = workbook.Worksheets.Add("Hoja1");
+            MessageBox.Show("No hay datos para exportar.");
+            return;
+        }
 
-            // Copiar los encabezados del DataGridView
-            for (int i = 1; i <= dataGridView1.Columns.Count; i++)
-            {
-                worksheet.Cell(1, i).Value = dataGridView1.Columns[i - 1].HeaderText;
-            }
+        // Activamos el cursor de carga para que el usuario sepa que el sistema está trabajando
+        this.UseWaitCursor = true;
 
-            // Copiar los datos del DataGridView
-            for (int i = 0; i < dataGridView1.Rows.Count; i++)
+        try
+        {
+            // 1. Crear una tabla en la memoria RAM solo con las columnas visibles
+            DataTable dtExport = new DataTable();
+            List<string> columnasVisiblesName = new List<string>();
+
+            foreach (DataGridViewColumn col in dataGridView1.Columns)
             {
-                for (int j = 0; j < dataGridView1.Columns.Count; j++)
+                if (col.Visible)
                 {
-                    object cellValue = dataGridView1.Rows[i].Cells[j].Value;
+                    // Asignamos el nombre visible como encabezado
+                    string header = string.IsNullOrWhiteSpace(col.HeaderText) ? col.Name : col.HeaderText;
 
-                    if (cellValue is Double or float or Int32)
+                    // Evitamos que Excel tire error si dos columnas tienen el mismo título
+                    if (dtExport.Columns.Contains(header)) header += "_" + col.Index;
+
+                    // Extraemos el tipo de dato original para que las fórmulas (sumas) en Excel sigan funcionando
+                    Type tipoColumna = col.ValueType ?? typeof(object);
+                    if (Nullable.GetUnderlyingType(tipoColumna) != null)
                     {
-                        worksheet.Cell(i + 2, j + 1).Value = Convert.ToDouble(cellValue);
+                        tipoColumna = Nullable.GetUnderlyingType(tipoColumna);
                     }
-                    else if (cellValue is DateTime)
-                    {
-                        worksheet.Cell(i + 2, j + 1).Value = (DateTime)cellValue;
-                    }
-                    else if (cellValue is bool)
-                    {
-                        worksheet.Cell(i + 2, j + 1).Value = (bool)cellValue;
-                    }
-                    else
-                    {
-                        worksheet.Cell(i + 2, j + 1).Value = Convert.ToString(cellValue);
-                    }
+
+                    dtExport.Columns.Add(header, tipoColumna);
+                    columnasVisiblesName.Add(col.Name);
                 }
             }
 
-            // Guardar el archivo de Excel
-            SaveFileDialog saveFileDialog1 = new SaveFileDialog();
-            saveFileDialog1.Filter = "Excel Files (*.xlsx)|*.xlsx";
-            if (saveFileDialog1.ShowDialog() == DialogResult.OK)
-
+            // 2. Extraer los datos leyendo directamente la fuente de memoria (Ultra Rápido)
+            // Al usar bindingSource, garantizamos que se respeta exactamente lo que el auditor filtró/ordenó
+            foreach (DataRowView rowView in bindingSource)
             {
-                workbook.SaveAs(saveFileDialog1.FileName);
-                MessageBox.Show("Datos exportados a Excel correctamente.");
+                DataRow newRow = dtExport.NewRow();
+                for (int i = 0; i < columnasVisiblesName.Count; i++)
+                {
+                    newRow[i] = rowView[columnasVisiblesName[i]] ?? DBNull.Value;
+                }
+                dtExport.Rows.Add(newRow);
             }
+
+            // 3. Inyectar todo en Excel de un solo golpe
+            using (XLWorkbook workbook = new XLWorkbook())
+            {
+                var worksheet = workbook.Worksheets.Add("Auditoría");
+
+                // InsertTable procesa miles de filas en milisegundos y le da formato
+                var tablaExcel = worksheet.Cell(1, 1).InsertTable(dtExport);
+                tablaExcel.Theme = XLTableTheme.TableStyleMedium2; // Diseño estético de tabla oficial de Excel
+                worksheet.Columns().AdjustToContents(); // Auto-ajustar el ancho de las columnas al texto
+
+                SaveFileDialog saveFileDialog1 = new SaveFileDialog
+                {
+                    Filter = "Excel Files (*.xlsx)|*.xlsx",
+                    // Sugerimos un nombre inteligente para ahorrarle tiempo al auditor
+                    FileName = $"Auditoria_{FacturaTipo}_{FacturaLetra}-{FacturaPuntoDeVenta:D4}-{FacturaNumero:D8}.xlsx"
+                };
+
+                if (saveFileDialog1.ShowDialog() == DialogResult.OK)
+                {
+                    workbook.SaveAs(saveFileDialog1.FileName);
+                    MessageBox.Show("Datos exportados a Excel correctamente.", "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Hubo un error al intentar exportar: " + ex.Message, "Error de Exportación", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            this.UseWaitCursor = false;
         }
     }
 
