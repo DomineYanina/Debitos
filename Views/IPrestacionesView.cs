@@ -5,23 +5,24 @@ namespace Debitos.Views
 {
     public interface IPrestacionesView
     {
-        // Propiedades que la vista debe exponer (lo que el usuario ingresa)
+        // Propiedades que el presentador necesita leer o escribir
         string FacturaTipo { get; }
         string FacturaLetra { get; }
         int FacturaPuntoDeVenta { get; }
         int FacturaNumero { get; }
-
         string TipoRegistroFiltrado { get; set; }
-
-        // Propiedades para mostrar datos (lo que el presentador le manda a la vista)
         DataTable DatosGrilla { get; set; }
-        bool BotonBuscarVisible { get; set; }
 
-        // Métodos para mostrar mensajes
+        // Eventos para avisarle al presentador que el usuario hizo algo
+        event EventHandler BuscarDocumentoEvent;
+        event EventHandler GuardarParcialmenteEvent; // <-- NUEVO EVENTO
+
+        // Métodos para que el presentador controle la UI
         void MostrarMensaje(string mensaje);
         void MostrarCargando(bool mostrar);
+        void PrepararUI_GuardadoParcial(); // <-- NUEVO MÉTODO
 
-        // Eventos que la vista disparará y el presentador escuchará
-        event EventHandler BuscarDocumentoEvent;
+        // Método para entregarle los datos en memoria al presentador
+        DataView ObtenerDatosFiltrados(); // <-- NUEVO MÉTODO
     }
 }

@@ -17,6 +17,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private PrestacionesPresenter _presenter; // <-- El presentador
     private DebitosRepository _repository;
     public event EventHandler BuscarDocumentoEvent; // <-- El evento que pide la interfaz
+    public event EventHandler GuardarParcialmenteEvent;
 
     // Implementación de las propiedades para manejar la UI desde el Presentador
     public DataTable DatosGrilla
@@ -227,7 +228,8 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         // (Al final del constructor)
         _repository = new DebitosRepository(DatabaseConfig.ConnectionString); // <-- Guardamos en la variable global
-        _presenter = new PrestacionesPresenter(this, _repository);
+                                                                              // Al final del constructor, actualizá esta línea:
+        _presenter = new PrestacionesPresenter(this, _repository, usuario);
 
     }
 
@@ -2501,34 +2503,24 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnGuardarParcialmente_Click(object sender, EventArgs e)
     {
-        PrepararGuardadoParcial();
-
-        switch (FacturaTipo)
-        {
-            case "FC":
-                GuardarParcialFC();
-                break;
-            case "NC":
-                GuardarParcialNC();
-                break;
-            case "ND":
-                GuardarParcialND();
-                break;
-        }
-
-        MostrarMensajeGuardadoParcial();
+        // La vista avisa que hicieron clic, nada más.
+        GuardarParcialmenteEvent?.Invoke(this, EventArgs.Empty);
     }
 
-    private void PrepararGuardadoParcial()
+    public void PrepararUI_GuardadoParcial()
     {
         cargaCompletada = false;
         lblMontosNoAceptados.Visible = false;
         lblMontoTotalRegistrosEnPantalla.Visible = false;
     }
 
-    private void MostrarMensajeGuardadoParcial()
+    public DataView ObtenerDatosFiltrados()
     {
-        MessageBox.Show("Se ha almacenado de forma correcta parcialmente el documento");
+        if (bindingSource.DataSource is DataTable dt)
+        {
+            return dt.DefaultView;
+        }
+        return null;
     }
 
     private void btnBuscar_Click(object sender, EventArgs e)
@@ -2551,121 +2543,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             case "ND":
                 colorearColumnasND();
                 break;
-        }
-    }
-
-
-    private void GuardarParcialFC()
-    {
-        var listaParaGuardar = new List<CargaParcialDTO>();
-
-        // Leemos del BindingSource (memoria RAM)
-        foreach (DataRowView rowView in bindingSource)
-        {
-            DataRow row = rowView.Row;
-
-            bool debitoAceptado = row["nc_debitoaceptado"] != DBNull.Value && Convert.ToBoolean(row["nc_debitoaceptado"]);
-            string motivoDebito = row["nc_motivodedebito"]?.ToString() ?? "";
-            string motivoRefactura = row["nc_motivoderefactura"]?.ToString() ?? "";
-
-            if (debitoAceptado || !string.IsNullOrEmpty(motivoDebito) || !string.IsNullOrEmpty(motivoRefactura))
-            {
-                var dto = new CargaParcialDTO
-                {
-                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
-                    DebitoAceptado = debitoAceptado,
-                    MotivoDebito = row["nc_motivodedebito"],
-                    ImporteDebitado = row["nc_importedebitado"],
-                    DiasFacturados = row["nc_diasfacturados"],
-                    MotivoRefactura = row["nc_motivoderefactura"],
-                    ImporteRefactura = row["nc_importederefactura"],
-                    PrestacionEnglobante = row["nc_prestacionenglobante"]?.ToString(),
-                    Comentarios = row["nc_comentarios"]?.ToString(),
-                    CargadoCompletamente = false,
-                    Usuario = usuario
-                };
-                listaParaGuardar.Add(dto);
-            }
-        }
-
-        if (listaParaGuardar.Count > 0)
-        {
-            try { _repository.GuardarCargaParcialFC(listaParaGuardar); }
-            catch (Exception ex) { MessageBox.Show("Error al guardar: " + ex.Message); }
-        }
-    }
-
-    private void GuardarParcialNC()
-    {
-        var listaParaGuardar = new List<CargaParcialDTO>();
-
-        foreach (DataRowView rowView in bindingSource)
-        {
-            DataRow row = rowView.Row;
-            string motivoRefactura = row["nd_motivoderefactura"]?.ToString() ?? "";
-
-            if (!string.IsNullOrWhiteSpace(motivoRefactura))
-            {
-                var dto = new CargaParcialDTO
-                {
-                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
-                    IdNotaDeCredito = Convert.ToInt32(row["id_prestacion"]),
-                    MotivoRefactura = row["nd_motivoderefactura"],
-                    ImporteRefactura = row["nd_importederefactura"],
-                    Codigo = row["codigo"]?.ToString(),
-                    Comentarios = row["nd_comentarios"]?.ToString(),
-                    CargadoCompletamente = false,
-                    Usuario = usuario,
-                    TipoRegistro = TipoRegistroFiltrado
-                };
-                listaParaGuardar.Add(dto);
-            }
-        }
-
-        if (listaParaGuardar.Count > 0)
-        {
-            try { _repository.GuardarCargaParcialNC(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero); }
-            catch (Exception ex) { MessageBox.Show("Error al guardar NC: " + ex.Message); }
-        }
-    }
-
-    private void GuardarParcialND()
-    {
-        var listaParaGuardar = new List<CargaParcialDTO>();
-
-        foreach (DataRowView rowView in bindingSource)
-        {
-            DataRow row = rowView.Row;
-
-            bool debitoAceptado = row["nc_debitoaceptado"] != DBNull.Value && Convert.ToBoolean(row["nc_debitoaceptado"]);
-            string motivoDebito = row["nc_motivodedebito"]?.ToString() ?? "";
-            string motivoRefactura = row["nc_motivoderefactura"]?.ToString() ?? "";
-
-            if (debitoAceptado || !string.IsNullOrWhiteSpace(motivoDebito) || !string.IsNullOrWhiteSpace(motivoRefactura))
-            {
-                var dto = new CargaParcialDTO
-                {
-                    IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
-                    IdNotaDeDebito = Convert.ToInt32(row["id_prestacion"]),
-                    DebitoAceptado = debitoAceptado,
-                    MotivoDebito = row["nc_motivodedebito"],
-                    ImporteDebitado = row["nc_importedebitado"],
-                    DiasFacturados = row["nc_diasfacturados"],
-                    MotivoRefactura = row["nc_motivoderefactura"],
-                    ImporteRefactura = row["nc_importederefactura"],
-                    PrestacionEnglobante = row["nc_prestacionenglobante"]?.ToString(),
-                    Comentarios = row["nc_comentarios"]?.ToString(),
-                    CargadoCompletamente = false,
-                    Usuario = usuario
-                };
-                listaParaGuardar.Add(dto);
-            }
-        }
-
-        if (listaParaGuardar.Count > 0)
-        {
-            try { _repository.GuardarCargaParcialND(listaParaGuardar, FacturaTipo, FacturaLetra, FacturaPuntoDeVenta, FacturaNumero); }
-            catch (Exception ex) { MessageBox.Show("Error al guardar ND: " + ex.Message); }
         }
     }
 
