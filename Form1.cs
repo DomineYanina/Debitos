@@ -226,7 +226,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         dataGridView1.DoubleBuffered(true);
 
         // (Al final del constructor)
-        string connectionString = "Host=172.16.13.219;Port=5432;Username=postgres;Password=postgres;Database=Debitos;";
         _repository = new DebitosRepository(DatabaseConfig.ConnectionString); // <-- Guardamos en la variable global
         _presenter = new PrestacionesPresenter(this, _repository);
 
