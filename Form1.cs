@@ -18,6 +18,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private DebitosRepository _repository;
     public event EventHandler BuscarDocumentoEvent; // <-- El evento que pide la interfaz
     public event EventHandler GuardarParcialmenteEvent;
+    public event EventHandler GenerarNotaDeCreditoEvent;
 
     // Implementación de las propiedades para manejar la UI desde el Presentador
     public DataTable DatosGrilla
@@ -229,7 +230,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         // (Al final del constructor)
         _repository = new DebitosRepository(DatabaseConfig.ConnectionString); // <-- Guardamos en la variable global
                                                                               // Al final del constructor, actualizá esta línea:
-        _presenter = new PrestacionesPresenter(this, _repository, usuario);
+        _presenter = new PrestacionesPresenter(this, _repository, _usuario);
 
     }
 
@@ -2286,35 +2287,32 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void btnNuevaNotaDeCrédito_Click(object sender, EventArgs e)
     {
-        _repository.LimpiarAuxiliarNC(usuario);
-
-        switch (FacturaTipo)
-        {
-            case "FC":
-                GuardarValoresAntesDeDeshacerFiltro();
-                _repository.InsertarAuxiliarNC_FC(listaValoresParaBorradoDeFiltros, usuario, TipoRegistroFiltrado);
-                break;
-            case "ND":
-                GuardarValoresAntesDeDeshacerFiltroND();
-                _repository.InsertarAuxiliarNC_ND(listaValoresParaBorradoDeFiltrosND, usuario, TipoRegistroFiltrado);
-                break;
-        }
-
-        AbrirFormularioNotaDeCredito();
-        limpiarPantall();
-        panel1.Visible = false;
-        lblModulo.Visible = false;
-        btnBorrarCelda.Visible = false;
-        lblCantidadDeRegistrosFiltrados.Visible = false;
+        // Solo notificamos. No hay lógica de repositorio aquí.
+        GenerarNotaDeCreditoEvent?.Invoke(this, EventArgs.Empty);
     }
 
-    private void AbrirFormularioNotaDeCredito()
+    public void AbrirFormularioNotaDeCredito(bool cargaACompletar, string usuario)
     {
+        // Usamos el nombre de la variable que definimos en el constructor: ingresoInformacionNotaDeCredito
         ingresoInformacionNotaDeCredito = new IngresoInformacionNotaDeCredito(
             cargaACompletar, FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo, usuario);
         ingresoInformacionNotaDeCredito.Show();
     }
 
+    public DataTable ObtenerDataTableActual()
+    {
+        return (DataTable)bindingSource.DataSource;
+    }
+
+    public void LimpiarUI_PostOperacion()
+    {
+        limpiarPantall(); // Tu método que ya limpia los TextBox
+        panel1.Visible = false;
+        lblModulo.Visible = false;
+        btnBorrarCelda.Visible = false;
+        lblCantidadDeRegistrosFiltrados.Visible = false;
+        // Agregá cualquier otro control que necesites resetear
+    }
 
     private void btnNuevaNotaDeDébito_Click(object sender, EventArgs e)
     {

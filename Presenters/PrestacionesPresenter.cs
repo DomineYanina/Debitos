@@ -21,6 +21,70 @@ namespace Debitos.Presenters
             // Suscribimos el presentador a los eventos de la vista
             _view.BuscarDocumentoEvent += BuscarDocumento;
             _view.GuardarParcialmenteEvent += GuardarParcialmente;
+            _view.GenerarNotaDeCreditoEvent += GenerarNotaDeCredito;
+        }
+
+        private void GenerarNotaDeCredito(object sender, EventArgs e)
+        {
+            try
+            {
+                // Lógica de negocio: Limpiar auxiliares
+                _repository.LimpiarAuxiliarNC(_usuarioAuditor);
+
+                // Obtenemos los datos para procesar
+                DataTable datos = _view.ObtenerDataTableActual();
+
+                // Lógica de decisión que antes estaba en el Form1
+                if (_view.FacturaTipo == "FC")
+                {
+                    // Aquí deberías llamar a un método que extraiga los datos de la tabla
+                    // (Moviendo la lógica de 'GuardarValoresAntesDeDeshacerFiltro' aquí)
+                    var lista = MapearDatosParaAuxiliar(datos);
+                    _repository.InsertarAuxiliarNC_FC(lista, _usuarioAuditor, _view.TipoRegistroFiltrado);
+                }
+                // ... repetir lógica para ND si aplica ...
+
+                // Ordenar acciones a la vista
+                _view.AbrirFormularioNotaDeCredito(true, _usuarioAuditor);
+                _view.LimpiarUI_PostOperacion();
+            }
+            catch (Exception ex)
+            {
+                _view.MostrarMensaje("Error al generar nota: " + ex.Message);
+            }
+        }
+
+        private List<(int, object?, object?, double?, double?, string?, bool, object?, string?, string?)> MapearDatosParaAuxiliar(DataTable dt)
+        {
+            // Esta lista utiliza la tupla exacta que espera el método InsertarAuxiliarNC_FC del repositorio
+            var lista = new List<(int, object?, object?, double?, double?, string?, bool, object?, string?, string?)>();
+
+            foreach (DataRow row in dt.Rows)
+            {
+                // 1. Extraer valores con seguridad verificando DBNull
+                bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
+                string motivoRefactura = row["NC_MotivoDeRefactura"]?.ToString();
+                string motivoDebito = row["NC_MotivoDeDebito"]?.ToString();
+
+                // 2. Criterio de inclusión: Solo agregamos la fila si el usuario cargó algún dato relevante
+                if (debitoAceptado || !string.IsNullOrEmpty(motivoRefactura) || !string.IsNullOrEmpty(motivoDebito))
+                {
+                    // Construimos la tupla mapeando las columnas del DataTable a los tipos del Repositorio
+                    lista.Add((
+                        Convert.ToInt32(row["id_prestacion"]),
+                        string.IsNullOrEmpty(motivoRefactura) ? DBNull.Value : motivoRefactura,
+                        string.IsNullOrEmpty(motivoDebito) ? DBNull.Value : motivoDebito,
+                        row["NC_ImporteDeRefactura"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDeRefactura"]) : (double?)null,
+                        row["NC_ImporteDebitado"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDebitado"]) : (double?)null,
+                        row["NC_Comentarios"]?.ToString().Replace("\0", "").Trim(), // Limpieza de caracteres nulos
+                        debitoAceptado,
+                        row.Table.Columns.Contains("NC_DiasFacturados") && row["NC_DiasFacturados"] != DBNull.Value ? row["NC_DiasFacturados"] : DBNull.Value,
+                        row["NC_PrestacionEnglobante"]?.ToString(),
+                        "" // El campo 'codigo' se envía vacío para Facturas (FC) según la lógica original
+                    ));
+                }
+            }
+            return lista;
         }
 
         private void GuardarParcialmente(object sender, EventArgs e)
