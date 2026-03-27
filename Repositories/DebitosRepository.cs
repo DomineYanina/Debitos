@@ -335,10 +335,6 @@ namespace Debitos.Repositories
             string comandoUpdate = @"UPDATE notadedebito SET motivorefactura = @motivoderefactura, importerefactura = @importederefactura, usuario = @usuario, codigo = @codigo, cargadocompletamente = @cargadocompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion;";
             string comandoInsert = @"INSERT INTO notadedebito (id_notadecredito, motivorefactura, importerefactura, codigo, usuario, id_prestacion, cargadocompletamente, comentarios, tiporegistro) VALUES (@id_notadecredito, @motivoderefactura, @importederefactura, @codigo, @usuario, @id_prestacion, @cargadocompletamente, @comentarios, @tiporegistro);";
 
-            // Para evitar la falta de constraints, borramos el registro si existe y lo volvemos a insertar limpio
-            string comandoLimpiarCarga = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion AND tipodocumento = @tipodocumento;";
-            string comandoInsertarCarga = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion);";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
@@ -346,21 +342,10 @@ namespace Debitos.Repositories
             {
                 foreach (var item in listaCarga)
                 {
-                    // 1. Actualizamos Carga Incompleta
-                    using var cmdDelCarga = new NpgsqlCommand(comandoLimpiarCarga, connection, transaction);
-                    cmdDelCarga.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    cmdDelCarga.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
-                    cmdDelCarga.ExecuteNonQuery();
+                    // 1. Usamos nuestro nuevo método centralizado
+                    RegistrarCargaIncompleta(connection, transaction, item.IdPrestacion, tipoDocumento, letra, ptovta, numero);
 
-                    using var cmdInsCarga = new NpgsqlCommand(comandoInsertarCarga, connection, transaction);
-                    cmdInsCarga.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
-                    cmdInsCarga.Parameters.AddWithValue("@letra", letra);
-                    cmdInsCarga.Parameters.AddWithValue("@ptovta", ptovta);
-                    cmdInsCarga.Parameters.AddWithValue("@numero", numero);
-                    cmdInsCarga.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    cmdInsCarga.ExecuteNonQuery();
-
-                    // 2. Intentamos el UPDATE de la Nota de Débito asociada a la NC
+                    // 2. Intentamos el UPDATE
                     using var commandUpdate = new NpgsqlCommand(comandoUpdate, connection, transaction);
                     commandUpdate.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
                     commandUpdate.Parameters.AddWithValue("@motivoderefactura", item.MotivoRefactura ?? DBNull.Value);
@@ -372,7 +357,7 @@ namespace Debitos.Repositories
 
                     int filasAfectadas = commandUpdate.ExecuteNonQuery();
 
-                    // 3. Si dio 0, no existía. Hacemos el INSERT.
+                    // 3. Si no existía, hacemos el INSERT
                     if (filasAfectadas == 0)
                     {
                         using var commandInsert = new NpgsqlCommand(comandoInsert, connection, transaction);
@@ -402,9 +387,6 @@ namespace Debitos.Repositories
             string comandoUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, usuario = @usuario, cargadocompletamente = @cargadocompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion;";
             string comandoInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, cargadocompletamente, id_notadedebito, comentarios) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @cargadocompletamente, @id_notadedebito, @comentarios);";
 
-            string comandoLimpiarCarga = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion AND tipodocumento = @tipodocumento;";
-            string comandoInsertarCarga = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion);";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
@@ -412,19 +394,10 @@ namespace Debitos.Repositories
             {
                 foreach (var item in listaCarga)
                 {
-                    using var cmdDelCarga = new NpgsqlCommand(comandoLimpiarCarga, connection, transaction);
-                    cmdDelCarga.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    cmdDelCarga.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
-                    cmdDelCarga.ExecuteNonQuery();
+                    // 1. Usamos nuestro método centralizado para limpiar e insertar en cargaincompleta
+                    RegistrarCargaIncompleta(connection, transaction, item.IdPrestacion, tipoDocumento, letra, ptovta, numero);
 
-                    using var cmdInsCarga = new NpgsqlCommand(comandoInsertarCarga, connection, transaction);
-                    cmdInsCarga.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
-                    cmdInsCarga.Parameters.AddWithValue("@letra", letra);
-                    cmdInsCarga.Parameters.AddWithValue("@ptovta", ptovta);
-                    cmdInsCarga.Parameters.AddWithValue("@numero", numero);
-                    cmdInsCarga.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    cmdInsCarga.ExecuteNonQuery();
-
+                    // 2. Intentamos el UPDATE de la Nota de Crédito asociada a la ND
                     using var commandUpdate = new NpgsqlCommand(comandoUpdate, connection, transaction);
                     commandUpdate.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
                     commandUpdate.Parameters.AddWithValue("@motivodedebito", item.MotivoDebito ?? DBNull.Value);
@@ -439,6 +412,7 @@ namespace Debitos.Repositories
 
                     int filasAfectadas = commandUpdate.ExecuteNonQuery();
 
+                    // 3. Si dio 0, no existía. Hacemos el INSERT.
                     if (filasAfectadas == 0)
                     {
                         using var commandInsert = new NpgsqlCommand(comandoInsert, connection, transaction);
@@ -613,22 +587,7 @@ namespace Debitos.Repositories
 
                 if (!encontrado)
                 {
-                    string queryCreacionRelacion = @"INSERT INTO relaciones
-                    (tipo_doc_origen, ptovta_origen, letra_origen, numero_origen, tipo_doc_destino, ptovta_destino, letra_destino, numero_destino)
-                    VALUES
-                    (@tipo_doc_origen, @ptovta_origen, @letra_origen, @numero_origen, @tipo_doc_destino, @ptovta_destino, @letra_destino, @numero_destino);";
-                    using (var cmdRelacion = new NpgsqlCommand(queryCreacionRelacion, connection, transaction))
-                    {
-                        cmdRelacion.Parameters.AddWithValue("@numero_origen", facturaNumero);
-                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_origen", facturaTipo);
-                        cmdRelacion.Parameters.AddWithValue("@letra_origen", facturaLetra);
-                        cmdRelacion.Parameters.AddWithValue("@ptovta_origen", facturaPuntoDeVenta);
-                        cmdRelacion.Parameters.AddWithValue("@letra_destino", letraDestino);
-                        cmdRelacion.Parameters.AddWithValue("@ptovta_destino", ptovtaDestino);
-                        cmdRelacion.Parameters.AddWithValue("@numero_destino", numeroDestino);
-                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_destino", tipoDeArchivo);
-                        cmdRelacion.ExecuteNonQuery();
-                    }
+                    InsertarRelacionDocumento(connection, transaction, facturaTipo, facturaLetra, facturaPuntoDeVenta, facturaNumero, tipoDeArchivo, letraDestino, ptovtaDestino, numeroDestino);
                 }
 
                 using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnc WHERE usuario = @usuarioAuditor", connection, transaction))
@@ -644,6 +603,29 @@ namespace Debitos.Repositories
                 transaction.Rollback();
                 throw;
             }
+        }
+
+        private void InsertarRelacionDocumento(NpgsqlConnection connection, NpgsqlTransaction transaction,
+    string tipoOrigen, string letraOrigen, int ptovtaOrigen, int numeroOrigen,
+    string tipoDestino, string letraDestino, int ptovtaDestino, int numeroDestino)
+        {
+            string queryCreacionRelacion = @"INSERT INTO relaciones
+        (tipo_doc_origen, ptovta_origen, letra_origen, numero_origen, tipo_doc_destino, ptovta_destino, letra_destino, numero_destino)
+        VALUES
+        (@tipo_doc_origen, @ptovta_origen, @letra_origen, @numero_origen, @tipo_doc_destino, @ptovta_destino, @letra_destino, @numero_destino);";
+
+            using var cmdRelacion = new NpgsqlCommand(queryCreacionRelacion, connection, transaction);
+            cmdRelacion.Parameters.AddWithValue("@numero_origen", numeroOrigen);
+            cmdRelacion.Parameters.AddWithValue("@tipo_doc_origen", tipoOrigen);
+            cmdRelacion.Parameters.AddWithValue("@letra_origen", letraOrigen);
+            cmdRelacion.Parameters.AddWithValue("@ptovta_origen", ptovtaOrigen);
+
+            cmdRelacion.Parameters.AddWithValue("@letra_destino", letraDestino);
+            cmdRelacion.Parameters.AddWithValue("@ptovta_destino", ptovtaDestino);
+            cmdRelacion.Parameters.AddWithValue("@numero_destino", numeroDestino);
+            cmdRelacion.Parameters.AddWithValue("@tipo_doc_destino", tipoDestino);
+
+            cmdRelacion.ExecuteNonQuery();
         }
 
         public void ProcesarGuardadoNotaDeDebito(string tipoDeArchivo, string letraDestino, int ptovtaDestino, int numeroDestino, DateTime fecha, int facturaNumero, string facturaLetra, int facturaPuntoDeVenta, string facturaTipo, string usuarioAuditor)
@@ -780,22 +762,7 @@ namespace Debitos.Repositories
 
                 if (!encontrado)
                 {
-                    string queryCreacionRelacion = @"INSERT INTO relaciones
-                    (tipo_doc_origen, ptovta_origen, letra_origen, numero_origen, tipo_doc_destino, ptovta_destino, letra_destino, numero_destino)
-                    VALUES
-                    (@tipo_doc_origen, @ptovta_origen, @letra_origen, @numero_origen, @tipo_doc_destino, @ptovta_destino, @letra_destino, @numero_destino);";
-                    using (var cmdRelacion = new NpgsqlCommand(queryCreacionRelacion, connection, transaction))
-                    {
-                        cmdRelacion.Parameters.AddWithValue("@numero_origen", facturaNumero);
-                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_origen", facturaTipo);
-                        cmdRelacion.Parameters.AddWithValue("@letra_origen", facturaLetra);
-                        cmdRelacion.Parameters.AddWithValue("@ptovta_origen", facturaPuntoDeVenta);
-                        cmdRelacion.Parameters.AddWithValue("@letra_destino", letraDestino);
-                        cmdRelacion.Parameters.AddWithValue("@ptovta_destino", ptovtaDestino);
-                        cmdRelacion.Parameters.AddWithValue("@numero_destino", numeroDestino);
-                        cmdRelacion.Parameters.AddWithValue("@tipo_doc_destino", tipoDeArchivo);
-                        cmdRelacion.ExecuteNonQuery();
-                    }
+                    InsertarRelacionDocumento(connection, transaction, facturaTipo, facturaLetra, facturaPuntoDeVenta, facturaNumero, tipoDeArchivo, letraDestino, ptovtaDestino, numeroDestino);
                 }
 
                 using (var cmdDelete = new NpgsqlCommand("DELETE FROM auxnd WHERE usuario = @usuarioAuditor", connection, transaction))
@@ -930,6 +897,28 @@ namespace Debitos.Repositories
             }
 
             return historial;
+        }
+
+        private void RegistrarCargaIncompleta(NpgsqlConnection connection, NpgsqlTransaction transaction, int idPrestacion, string tipoDocumento, string letra, int ptovta, int numero)
+        {
+            string comandoLimpiar = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion AND tipodocumento = @tipodocumento;";
+            using (var cmdDel = new NpgsqlCommand(comandoLimpiar, connection, transaction))
+            {
+                cmdDel.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                cmdDel.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
+                cmdDel.ExecuteNonQuery();
+            }
+
+            string comandoInsertar = @"INSERT INTO cargaincompleta (tipodocumento, letra, ptovta, numero, id_prestacion) VALUES (@tipodocumento, @letra, @ptovta, @numero, @id_prestacion);";
+            using (var cmdIns = new NpgsqlCommand(comandoInsertar, connection, transaction))
+            {
+                cmdIns.Parameters.AddWithValue("@tipodocumento", tipoDocumento);
+                cmdIns.Parameters.AddWithValue("@letra", letra);
+                cmdIns.Parameters.AddWithValue("@ptovta", ptovta);
+                cmdIns.Parameters.AddWithValue("@numero", numero);
+                cmdIns.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                cmdIns.ExecuteNonQuery();
+            }
         }
     }
 }
