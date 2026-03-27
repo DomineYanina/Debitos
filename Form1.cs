@@ -19,8 +19,29 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     public event EventHandler BuscarDocumentoEvent; // <-- El evento que pide la interfaz
     public event EventHandler GuardarParcialmenteEvent;
     public event EventHandler GenerarNotaDeCreditoEvent;
+    private IngresoInformacionNotaDeCredito ingresoInformacionNotaDeCredito;
 
     // Implementación de las propiedades para manejar la UI desde el Presentador
+
+    public string TextoTotalRegistros
+    {
+        set => lblMontoTotalRegistrosEnPantalla.Text = value;
+    }
+
+    public string TextoMontosNoAceptados
+    {
+        set => lblMontosNoAceptados.Text = value;
+    }
+
+    public bool VisibilidadTotales
+    {
+        set
+        {
+            lblMontoTotalRegistrosEnPantalla.Visible = value;
+            lblMontosNoAceptados.Visible = value;
+        }
+    }
+
     public DataTable DatosGrilla
     {
         get => (DataTable)bindingSource.DataSource;
@@ -155,7 +176,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     protected string cargaMotivoDeDebitos = "SELECT DISTINCT descripcion from motivodeldebito ORDER BY descripcion ASC";
     
 
-    protected IngresoInformacionNotaDeCredito ingresoInformacionNotaDeCredito;
     protected IngresoInformacionNotaDeDebito ingresoInformacionNotaDeDebito;
     protected VerHistorialDelDocumento verHistorialDelDocumento;
 
@@ -409,7 +429,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             lblNumeroDeInternacionSel.Visible = false;
         }
 
-        contarFilasConDebitoAceptado();
+        _presenter.RecalcularTotales();
         dataGridView1.ResumeLayout();
     }
 
@@ -672,7 +692,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         btnBorrarFiltros.Visible = algunFiltro;
         AplicarFormatoYVisibilidadPorTipoFactura(bindingSource.Count);
         ActualizarCantidadDeRegistrosFiltrados();
-        contarFilasConDebitoAceptado();
+        _presenter.RecalcularTotales();
 
         DataView vistaFiltrada = new DataView(dt);
         vistaFiltrada.RowFilter = filtroFinal;
@@ -956,32 +976,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         btnBorrarFiltros.Visible = false;
     }
 
-    public void contarFilasConDebitoAceptado()
-    {
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-        DataRow[] filasFiltradas = dataTableActual.Select("nc_debitoaceptado = true");
-
-        lblCantidadDeRegistrosConDebitoAceptado.Text = ("Cantidad de registros con débito aceptado: " + filasFiltradas.Length);
-    }
-
-
-    private void guardarRegistrosPreviosEnBDD(DataTable tablaAMostrar)
-    {
-        foreach (DataRow fila in tablaAMostrar.Rows)
-        {
-            // Verifica que nc_debitoaceptado no sea DBNull y que nc_motivodedebito tampoco sea DBNull
-            if (fila["nc_debitoaceptado"] != DBNull.Value && fila["nc_motivodedebito"] != DBNull.Value)
-            {
-                listaPrestacionesYaExistentes.Add((int)fila["id_prestacion"]);
-            }
-        }
-    }
-
-
     private void ConfigurarUIPorTipoFactura()
     {
         switch (FacturaTipo)
@@ -1053,39 +1047,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         tablasFiltradas.Clear();
     }
 
-
-    public void actualizarImporteRefactura()
-    {
-        double? sumaNoAceptados = 0.0;
-
-        if (listaValoresParaBorradoDeFiltros.Count > 0)
-        {
-            foreach (var item in listaValoresParaBorradoDeFiltros)
-            {
-                if (!item.debitoAceptado)
-                {
-                    sumaNoAceptados += item.importeRefactura ?? 0;
-                }
-            }
-        }
-        else
-        {
-            foreach (DataGridViewRow row in dataGridView1.Rows)
-            {
-                if (!Convert.IsDBNull(row.Cells["NC_DebitoAceptado"].Value) && !Convert.ToBoolean(row.Cells["NC_DebitoAceptado"].Value))
-                {
-                    double importe = Convert.IsDBNull(row.Cells["NC_ImporteDeRefactura"].Value)
-                                     ? 0
-                                     : Convert.ToDouble(row.Cells["NC_ImporteDeRefactura"].Value);
-
-                    sumaNoAceptados += importe;
-                }
-            }
-        }
-
-        lblMontosNoAceptados.Text = "Suma total de débitos a refacturar: " + sumaNoAceptados;
-        lblMontosNoAceptados.Visible = true;
-    }
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargarSoloFiltroMotivoDebito == false)
@@ -1141,7 +1102,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
                 // Es importante detener la edición para que el valor quede fijado visualmente
                 dataGridView1.EndEdit();
-                contarFilasConDebitoAceptado();
+                _presenter.RecalcularTotales();
             }
         }
         cargarSoloFiltroMotivoDebito = false;
@@ -1421,7 +1382,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         cargaPrimeraVez = false;
         dataGridView1.Refresh();
         if (debitoIndividual)
-            contarFilasConDebitoAceptado();
+            _presenter.RecalcularTotales();
     }
 
     private bool EsColumna(DataGridViewRow fila, int columnIndex, string nombreColumna)
@@ -1694,7 +1655,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
 
             dataGridView1.Refresh();
-            contarFilasConDebitoAceptado();
+            _presenter.RecalcularTotales();
         }
         else
         {
@@ -1779,7 +1740,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 }
                 dataGridView1.Refresh();
 
-                contarFilasConDebitoAceptado();
+                _presenter.RecalcularTotales();
 
             }
             else
@@ -1789,7 +1750,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
 
         debitoIndividual = true;
-        //contarFilasConDebitoAceptado();
 
     }
 
@@ -2410,7 +2370,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         // 2. Actualizamos todos los totales
         GuardarValoresParaActualizarMontoAuditados();
         GuardarValoresParaActualizarMontoDeRefactura();
-        contarFilasConDebitoAceptado();
+        _presenter.RecalcularTotales();
         dataGridView1.Refresh();
     }
 
@@ -3285,7 +3245,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         // 2. Actualizamos todos los totales de la pantalla
         GuardarValoresParaActualizarMontoAuditados();
         GuardarValoresParaActualizarMontoDeRefactura();
-        contarFilasConDebitoAceptado();
+        _presenter.RecalcularTotales();
         dataGridView1.Refresh();
     }
 

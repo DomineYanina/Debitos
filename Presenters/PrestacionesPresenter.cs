@@ -24,6 +24,38 @@ namespace Debitos.Presenters
             _view.GenerarNotaDeCreditoEvent += GenerarNotaDeCredito;
         }
 
+        public void RecalcularTotales()
+        {
+            DataTable dt = _view.ObtenerDataTableActual();
+            if (dt == null || dt.Rows.Count == 0)
+            {
+                _view.VisibilidadTotales = false;
+                return;
+            }
+
+            try
+            {
+                // 1. Contar cuántas filas tienen débito aceptado
+                // Usamos la columna real del DataTable, no la de la Grilla
+                int filasAceptadas = dt.Select("nc_debitoaceptado = true").Length;
+
+                // 2. Sumar el importe total debitado
+                // .Compute permite hacer sumas filtradas directamente
+                object sumDebito = dt.Compute("SUM(nc_importedebitado)", "nc_debitoaceptado = true");
+                double totalDebitado = sumDebito != DBNull.Value ? Convert.ToDouble(sumDebito) : 0;
+
+                // 3. Actualizar la Vista
+                _view.TextoTotalRegistros = $"Total Registros: {dt.Rows.Count} | Aceptados: {filasAceptadas}";
+                _view.TextoMontosNoAceptados = $"Total Debitado: {totalDebitado:C2}";
+                _view.VisibilidadTotales = true;
+            }
+            catch (Exception)
+            {
+                // Si algo falla (ej. columna inexistente), ocultamos por seguridad
+                _view.VisibilidadTotales = false;
+            }
+        }
+
         private void GenerarNotaDeCredito(object sender, EventArgs e)
         {
             try

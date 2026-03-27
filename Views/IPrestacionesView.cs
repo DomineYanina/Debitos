@@ -12,6 +12,9 @@ namespace Debitos.Views
         int FacturaNumero { get; }
         string TipoRegistroFiltrado { get; set; }
         DataTable DatosGrilla { get; set; }
+        string TextoTotalRegistros { set; }
+        string TextoMontosNoAceptados { set; }
+        bool VisibilidadTotales { set; }
 
         // Eventos para avisarle al presentador que el usuario hizo algo
         event EventHandler BuscarDocumentoEvent;
