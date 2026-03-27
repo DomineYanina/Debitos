@@ -155,11 +155,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     public List<int> listaPrestacionesYaExistentes = new List<int>();
 
     private string condicionesFiltro = "";
-    public string comandoSeleccionAmbLiquidado1 = "";
-    public string comandoSeleccionTipoDeRegistro = "";
-    public string comandoBusquedaDeGuardadoParcialEnTabla = @"SELECT * FROM cargaincompleta where tipodocumento = @tipodocumento AND letra = @letra AND ptovta = @ptovta AND numero = @numero;";
-
-    public string comandoSeleccionAmbLiquidado = "SELECT al.id, al.paciente, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, al.cob_factura_tipo, al.cob_factura_letra, al.cob_factura_ptoventa, al.cob_factura_numero, al.porcentaje_especialista, al.porcentaje_ayudante1, al.porcentaje_anestesista, al.porcentaje_gastos, nc.motivodedebito, nc.importedebitado, nc.debitoaceptado FROM amb_liquidado al LEFT JOIN notadecredito nc ON al.id = nc.id_prestacion";
     
     protected bool primerFiltroFecha = false;
     protected bool cargaListaPaciente = false;
@@ -172,9 +167,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     protected bool cargaListaFacturaPuntoDeVenta = false;
     protected bool cargaListaFacturaNumero = false;
     protected bool cargaListaNumeroDeInternacion = false;
-
-    protected string cargaMotivoDeDebitos = "SELECT DISTINCT descripcion from motivodeldebito ORDER BY descripcion ASC";
-    
 
     protected IngresoInformacionNotaDeDebito ingresoInformacionNotaDeDebito;
     protected VerHistorialDelDocumento verHistorialDelDocumento;
@@ -326,7 +318,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         tablasFiltradas.Clear();
 
         condicionesFiltro = "";
-        comandoSeleccionAmbLiquidado1 = "";
         primerFiltroFecha = false;
         cargaListaPaciente = false;
         cargaListaModulo = false;
@@ -412,7 +403,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         btnBorrarFiltros.Visible = false;
 
-        if (TipoRegistroFiltrado == "Internados")
+        if (TipoRegistroFiltrado == TipoRegistro.Internados)
         {
             filtroNumeroDeInternacion.Visible = true;
             filtroModulo.Visible = true;
@@ -437,13 +428,13 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     {
         switch (FacturaTipo)
         {
-            case "FC":
+            case TipoDocumento.Factura:
                 GuardarValoresAntesDeDeshacerFiltro();
                 break;
-            case "NC":
+            case TipoDocumento.NotaCredito:
                 GuardarValoresAntesDeDeshacerFiltroNC();
                 break;
-            case "ND":
+            case TipoDocumento.NotaDebito:
                 GuardarValoresAntesDeDeshacerFiltro();
                 break;
         }
@@ -479,7 +470,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         filtroPrestacion.Visible = true;
         filtroProfesional.Visible = true;
         filtroModulo.Visible = true;
-        filtroNumeroDeInternacion.Visible = TipoRegistroFiltrado == "Internados";
+        filtroNumeroDeInternacion.Visible = TipoRegistroFiltrado == TipoRegistro.Internados;
 
         // Ocultar etiquetas de filtros seleccionados
         lblPacSel.Visible = false;
@@ -501,103 +492,9 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblModulo.Text = "Módulo";
     }
 
-    private void RestaurarColoresPorTipoFactura()
-    {
-        switch (FacturaTipo)
-        {
-            case "FC":
-                restaurarValoresAlBorrarFiltros();
-                colorearColumnasFC();
-                break;
-            case "NC":
-                restaurarValoresAlBorrarFiltrosNC();
-                colorearColumnasNC();
-                break;
-            case "ND":
-                restaurarValoresAlBorrarFiltros();
-                colorearColumnasND();
-                break;
-        }
-    }
-
     private void ActualizarCantidadDeRegistrosFiltrados()
     {
         lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + bindingSource.Count;
-    }
-
-
-    private void restaurarValoresAlBorrarFiltrosNC()
-    {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (row.Cells["id"].Value != null)
-            {
-                int idPrestacion = Convert.ToInt32(row.Cells["id"].Value);
-
-                // Buscar el valor correspondiente en la lista almacenada
-                var item = listaValoresParaBorradoDeFiltrosNC.FirstOrDefault(x => x.idPrestacion == idPrestacion);
-
-                // Restaurar el valor si existe en la lista almacenada
-                if (item.idPrestacion == idPrestacion)
-                {
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_MotivoDeRefactura"].Value = item.motivoRefactura;
-                    cargaPrimeraVez = true;
-
-                    if (item.motivoRefactura == "No aplica")
-                    {
-                        row.Cells["NC_ImporteDeRefactura"].Value = DBNull.Value;
-                    }
-                    else
-                    {
-                        row.Cells["NC_ImporteDeRefactura"].Value = item.importeRefactura;
-                    }
-
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_Comentarios"].Value = item.comentarios;
-                }
-            }
-        }
-    }
-
-    private void restaurarValoresAlBorrarFiltros()
-    {
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (row.Cells["id_prestacion"].Value != null)
-            {
-                int idPrestacion = Convert.ToInt32(row.Cells["id_prestacion"].Value);
-
-                // Buscar el valor correspondiente en la lista almacenada
-                var item = listaValoresParaBorradoDeFiltros.FirstOrDefault(x => x.idPrestacion == idPrestacion);
-
-                // Restaurar el valor si existe en la lista almacenada
-                if (item.idPrestacion == idPrestacion)
-                {
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_MotivoDeRefactura"].Value = item.motivoRefactura;
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_MotivoDeDebito"].Value = item.motivoDebito;
-                    cargaPrimeraVez = true;
-
-                    if (item.motivoRefactura?.ToString() == "No aplica")
-                    {
-                        row.Cells["NC_ImporteDeRefactura"].Value = DBNull.Value;
-                    }
-                    else
-                    {
-                        row.Cells["NC_ImporteDeRefactura"].Value = item.importeRefactura;
-                    }
-
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_ImporteDebitado"].Value = item.importeDebito;
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_Comentarios"].Value = item.comentarios;
-                    cargaPrimeraVez = true;
-                    row.Cells["NC_DebitoAceptado"].Value = item.debitoAceptado;
-                }
-            }
-        }
     }
 
     private void filtroModulo_SelectedIndexChanged(object sender, EventArgs e)
@@ -663,9 +560,9 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         // --- CHECKBOXES INTEGRADAS ---
         if (checkPrestacionesSinRefactura.Checked)
         {
-            if (FacturaTipo == "FC" || FacturaTipo == "ND")
+            if (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito)
                 filtros.Add("(nc_motivoderefactura IS NULL OR nc_motivoderefactura = '')");
-            else if (FacturaTipo == "NC")
+            else if (FacturaTipo == TipoDocumento.NotaCredito)
                 filtros.Add("(nd_motivoderefactura IS NULL OR nd_motivoderefactura = '')");
         }
 
@@ -710,19 +607,19 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     {
         switch (FacturaTipo)
         {
-            case "FC":
+            case TipoDocumento.Factura:
                 colorearColumnasFC();
                 filtroMotivoDebito.Visible = true;
                 checkMotivoDebito.Visible = true;
                 label6.Visible = true;
                 break;
-            case "NC":
+            case TipoDocumento.NotaCredito:
                 colorearColumnasNC();
                 filtroMotivoDebito.Visible = false;
                 checkMotivoDebito.Visible = false;
                 label6.Visible = false;
                 break;
-            case "ND":
+            case TipoDocumento.NotaDebito:
                 colorearColumnasND();
                 filtroMotivoDebito.Visible = true;
                 checkMotivoDebito.Visible = true;
@@ -759,27 +656,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         lblPrestSel.Visible = true;
         filtroPrestacion.Visible = false;
         AplicarFiltrosActivos();
-    }
-
-    private void evaluarPrestacionEnglobante()
-    {
-        bool ocultar = false;
-        foreach (DataGridViewRow fila in dataGridView1.Rows)
-        {
-            if (fila.Cells["NC_MotivoDeDebito"].Value == "Prestacion incluida en otra")
-            {
-                ocultar = true;
-                break;
-            }
-        }
-        if (ocultar)
-        {
-            dataGridView1.Columns["nc_prestacionenglobante"].Visible = true;
-        }
-        else
-        {
-            dataGridView1.Columns["nc_prestacionenglobante"].Visible = false;
-        }
     }
 
     private void filtroTipo_SelectedIndexChanged(object sender, EventArgs e)
@@ -853,7 +729,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             if (!string.IsNullOrEmpty(config.HeaderText))
                 col.HeaderText = config.HeaderText;
 
-            if ((FacturaTipo == "FC" && config.Name == "nc_comentarios") || (FacturaTipo == "ND" && config.Name == "nc_comentarios") || (FacturaTipo == "NC" && config.Name == "nd_comentarios"))
+            if ((FacturaTipo == TipoDocumento.Factura && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaDebito && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaCredito && config.Name == "nd_comentarios"))
             {
                 col.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             }
@@ -867,7 +743,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 col.AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader;
             }
 
-            if (config.Name == "paciente" && FacturaTipo == "NC")
+            if (config.Name == "paciente" && FacturaTipo == TipoDocumento.NotaCredito)
             {
                 col.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             }
@@ -889,7 +765,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void colorearColumnasFC()
     {
-        if (TipoRegistroFiltrado == "Internados")
+        if (TipoRegistroFiltrado == TipoRegistro.Internados)
         {
             if (dataGridView1.Columns.Contains("F_Ingreso")) dataGridView1.Columns["F_Ingreso"].Visible = false;
             if (dataGridView1.Columns.Contains("F_Egreso")) dataGridView1.Columns["F_Egreso"].Visible = false;
@@ -918,7 +794,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void colorearColumnasNC()
     {
-        if (TipoRegistroFiltrado == "Internados")
+        if (TipoRegistroFiltrado == TipoRegistro.Internados)
         {
             if (dataGridView1.Columns.Contains("F_Ingreso")) dataGridView1.Columns["F_Ingreso"].Visible = false;
             if (dataGridView1.Columns.Contains("F_Egreso")) dataGridView1.Columns["F_Egreso"].Visible = false;
@@ -948,7 +824,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void colorearColumnasND()
     {
-        if (TipoRegistroFiltrado == "Internados")
+        if (TipoRegistroFiltrado == TipoRegistro.Internados)
         {
             if (dataGridView1.Columns.Contains("F_Ingreso")) dataGridView1.Columns["F_Ingreso"].Visible = false;
             if (dataGridView1.Columns.Contains("F_Egreso")) dataGridView1.Columns["F_Egreso"].Visible = false;
@@ -974,77 +850,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
         }
         btnBorrarFiltros.Visible = false;
-    }
-
-    private void ConfigurarUIPorTipoFactura()
-    {
-        switch (FacturaTipo)
-        {
-            case "FC":
-                colorearColumnasFC();
-                filtroMotivoDebito.Visible = true;
-                checkMotivoDebito.Visible = true;
-                filtroDebitoAceptado.Visible = true;
-                filtroMotivoDebito.Visible = true;
-                filtroMotivoDeRefactura.Visible = true;
-                checkDebitoAceptado.Visible = true;
-                checkMotivoDeRefactura.Visible = true;
-                btnBorrarImporteDebito.Visible = true;
-                btnBorrarImporteRefactura.Visible = true;
-                label1.Visible = true;
-                label2.Visible = true;
-                label6.Visible = true;
-                break;
-            case "NC":
-                colorearColumnasNC();
-                filtroMotivoDeRefactura.Visible = true;
-                checkMotivoDeRefactura.Visible = true;
-                btnBorrarImporteDebito.Visible = false;
-                btnBorrarImporteRefactura.Visible = true;
-                label2.Visible = true;
-                break;
-            case "ND":
-                colorearColumnasND();
-                filtroMotivoDebito.Visible = true;
-                checkMotivoDebito.Visible = true;
-                filtroDebitoAceptado.Visible = true;
-                filtroMotivoDebito.Visible = true;
-                filtroMotivoDeRefactura.Visible = true;
-                checkDebitoAceptado.Visible = true;
-                checkMotivoDeRefactura.Visible = true;
-                btnBorrarImporteDebito.Visible = true;
-                btnBorrarImporteRefactura.Visible = true;
-                label1.Visible = true;
-                label2.Visible = true;
-                label6.Visible = true;
-                break;
-        }
-    }
-
-    private void ManejarDocumentoNoEncontrado()
-    {
-        SetControlesVisibles(false);
-        btnNuevaNotaDeCrédito.Visible = false;
-        btnNuevaNotaDeDébito.Visible = false;
-        btnGuardarParcialmente.Visible = false;
-        documentoEncontrado = false;
-        MessageBox.Show("No se ha encontrado el documento ingresado.");
-    }
-
-    private void PrepararBusqueda()
-    {
-        lblPacSel.Visible = false;
-        lblPrestSel.Visible = false;
-        lblProfSel.Visible = false;
-        lblNumeroDeInternacionSel.Visible = false;
-
-        listaPrestacionesYaExistentes.Clear();
-        listaValoresParaBorradoDeFiltrosNC.Clear();
-        listaValoresParaBorradoDeFiltros.Clear();
-        listaValoresParaBorradoDeFiltrosND.Clear();
-        documentoEncontrado = false;
-        //tablaAMostrar.Clear();
-        tablasFiltradas.Clear();
     }
 
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
@@ -1108,245 +913,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         cargarSoloFiltroMotivoDebito = false;
     }
 
-    private void AplicarPrestacionIncluidaEnOtraATodasLasFilas()
-    {
-        var idPrestaciones = new List<int>();
-        foreach (DataGridViewRow fila in dataGridView1.Rows)
-        {
-            if (!fila.IsNewRow)
-                idPrestaciones.Add(Convert.ToInt32(fila.Cells["ID_Prestacion"].Value));
-        }
-
-        tipoATransmitir = FacturaTipo switch
-        {
-            "FC" => "NC",
-            "NC" => "ND",
-            "ND" => "NC",
-            _ => ""
-        };
-
-        var form2 = new IngresoEnCasoDeCambioDePrestacion
-        {
-            codigoViejo = "0",
-            idPrestaciones = idPrestaciones,
-            tipoDocumentoTransmitido = tipoATransmitir
-        };
-        form2.ShowDialog();
-
-        dataGridView1.Columns["NC_PrestacionEnglobante"].Visible = true;
-        foreach (DataGridViewRow fila in dataGridView1.Rows)
-        {
-            if (!fila.IsNewRow)
-            {
-                cargaPrimeraVez = true;
-                fila.Cells["NC_PrestacionEnglobante"].Value = form2.codigoNuevo;
-                fila.Cells["NC_MotivoDeDebito"].Value = filtroMotivoDebito.Text;
-            }
-        }
-        dataGridView1.Refresh();
-    }
-
-    private void AplicarMotivoDebitoATodasLasFilas(string motivoSeleccionado)
-    {
-        bool reemplazarMotivosPrevios = false;
-        int columnaMotivoDebito = dataGridView1.Columns["NC_MotivoDeDebito"].Index;
-        foreach (DataGridViewRow fila in dataGridView1.Rows)
-        {
-            // Modifica la condición para que verifique si la celda está vacía (nula o string vacío)
-            if (fila.Cells[columnaMotivoDebito].Value != null && fila.Cells[columnaMotivoDebito].Value != DBNull.Value && fila.Cells[columnaMotivoDebito].Value.ToString().Trim() != "")
-            {
-                DialogResult resultado = MessageBox.Show(
-                    "Existen prestaciones con motivo de débito previo. \n" +
-                    "¿Desea reemplazar esos motivos preexistentes?\n\n" +
-                    "Al seleccionar SI, se reemplazarán los datos preexistentes.\n" +
-                    "Al seleccionar NO, se ingresará la información en las celdas vacías.",
-                    "Confirmación",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button2
-                );
-                reemplazarMotivosPrevios = (resultado == DialogResult.Yes);
-                break;
-            }
-        }
-
-        foreach (DataGridViewRow fila in dataGridView1.Rows)
-        {
-            if (fila.Cells[columnaMotivoDebito].Value != null && fila.Cells[columnaMotivoDebito].Value != DBNull.Value && fila.Cells[columnaMotivoDebito].Value.ToString().Trim() != "")
-            {
-                if (reemplazarMotivosPrevios)
-                {
-                    if (!fila.IsNewRow)
-                        fila.Cells[columnaMotivoDebito].Value = motivoSeleccionado;
-                }
-            }
-            else
-            {
-                if (!fila.IsNewRow)
-                    fila.Cells[columnaMotivoDebito].Value = motivoSeleccionado;
-            }
-        }
-        EvaluarPrestacionEnglobanteEnGrilla(motivoSeleccionado);
-        dataGridView1.Refresh();
-    }
-
-    private void AplicarMotivoDebitoACeldasSeleccionadas(string motivoSeleccionado)
-    {
-        if (dataGridView1.SelectedCells.Count == 0)
-        {
-            MessageBox.Show("Por favor, seleccione una o más celdas en el DataGridView para aplicar el valor.");
-            return;
-        }
-
-        // Analizar si hay celdas seleccionadas con motivo de débito previo
-        bool hayMotivosPrevios = false;
-        foreach (DataGridViewCell celda in dataGridView1.SelectedCells)
-        {
-            if (dataGridView1.Columns[celda.ColumnIndex].Name == "nc_motivodedebito")
-            {
-                if (celda.Value != null && celda.Value != DBNull.Value && celda.Value.ToString().Trim() != "")
-                {
-                    hayMotivosPrevios = true;
-                    break;
-                }
-            }
-        }
-
-        bool reemplazarMotivosPrevios = false;
-        if (hayMotivosPrevios)
-        {
-            DialogResult resultado = MessageBox.Show(
-                "Existen prestaciones seleccionadas con motivo de débito previo. \n" +
-                "¿Desea reemplazar esos motivos preexistentes?\n\n" +
-                "Al seleccionar SI, se reemplazarán los datos preexistentes.\n" +
-                "Al seleccionar NO, se ingresará la información en las celdas vacías.",
-                "Confirmación",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2
-            );
-            reemplazarMotivosPrevios = (resultado == DialogResult.Yes);
-        }
-
-        // Aplicar el motivo según la decisión del usuario
-        foreach (DataGridViewCell celda in dataGridView1.SelectedCells)
-        {
-            if (dataGridView1.Columns[celda.ColumnIndex].Name == "nc_motivodedebito")
-            {
-                if (reemplazarMotivosPrevios ||
-                    celda.Value == null ||
-                    celda.Value == DBNull.Value ||
-                    celda.Value.ToString().Trim() == "")
-                {
-                    celda.Value = motivoSeleccionado;
-                }
-            }
-        }
-
-        if (motivoSeleccionado == "Prestacion incluida en otra")
-        {
-            AplicarPrestacionIncluidaEnOtraASoloUnaSeleccion();
-        }
-        else
-        {
-            EvaluarPrestacionEnglobanteEnGrilla(motivoSeleccionado);
-        }
-        dataGridView1.Refresh();
-    }
-
-    private void AplicarPrestacionIncluidaEnOtraASoloUnaSeleccion()
-    {
-        if ((dataGridView1.SelectedRows.Count == 1) || (dataGridView1.SelectedCells.Count == 1))
-        {
-            DataGridViewRow filaSeleccionada = dataGridView1.SelectedRows.Count == 1
-                ? dataGridView1.SelectedRows[0]
-                : dataGridView1.Rows[dataGridView1.SelectedCells[0].RowIndex];
-
-            string codigoViejo = filaSeleccionada.Cells["codigo"].Value.ToString();
-            int idPrestacion = Convert.ToInt32(filaSeleccionada.Cells["ID_Prestacion"].Value);
-
-            tipoATransmitir = FacturaTipo switch
-            {
-                "FC" => "NC",
-                "NC" => "ND",
-                "ND" => "NC",
-                _ => ""
-            };
-
-            var form2 = new IngresoEnCasoDeCambioDePrestacion
-            {
-                codigoViejo = codigoViejo,
-                idPrestacion = idPrestacion,
-                idPrestaciones = new List<int> { idPrestacion },
-                tipoDocumentoTransmitido = tipoATransmitir
-            };
-            form2.ShowDialog();
-
-            // Asignar el valor seleccionado al DataGridView
-            filaSeleccionada.Cells["nc_prestacionenglobante"].Value = form2.codigoNuevo;
-
-            dataGridView1.Columns["NC_PrestacionEnglobante"].Visible = true;
-            dataGridView1.Columns["NC_PrestacionEnglobante"].ReadOnly = true;
-        }
-        else
-        {
-            MessageBox.Show("Debe seleccionar un solo registro para ésta operación");
-
-            // Borrar el contenido de las celdas seleccionadas de la columna nc_motivodedebito
-            foreach (DataGridViewCell celda in dataGridView1.SelectedCells)
-            {
-                if (dataGridView1.Columns[celda.ColumnIndex].Name == "nc_motivodedebito")
-                {
-                    celda.Value = DBNull.Value;
-                }
-            }
-        }
-    }
-
-    private void EvaluarPrestacionEnglobanteEnGrilla(string motivoSeleccionado)
-    {
-        bool hayPrestacionIncluida = false;
-        foreach (DataGridViewRow row in dataGridView1.Rows)
-        {
-            if (!row.IsNewRow)
-            {
-                string motDeb = row.Cells["NC_MotivoDeDebito"].Value?.ToString();
-                if (FacturaTipo != "ND" && motDeb == "Prestacion incluida en otra")
-                {
-                    hayPrestacionIncluida = true;
-                    break;
-                }
-            }
-        }
-
-        if (hayPrestacionIncluida)
-        {
-            foreach (DataGridViewRow row in dataGridView1.Rows)
-            {
-                if (!row.IsNewRow)
-                {
-                    string motivoDebito = row.Cells["NC_MotivoDeDebito"].Value?.ToString();
-                    if (FacturaTipo != "ND" && motivoDebito == "Prestacion incluida en otra")
-                    {
-                        row.Cells["NC_PrestacionEnglobante"].ReadOnly = false;
-                    }
-                    else
-                    {
-                        row.Cells["NC_PrestacionEnglobante"].ReadOnly = true;
-                        row.Cells["NC_PrestacionEnglobante"].Style.BackColor = System.Drawing.Color.Gray;
-                    }
-                }
-            }
-            dataGridView1.Columns["NC_PrestacionEnglobante"].Visible = true;
-        }
-        else
-        {
-            if (FacturaTipo != "ND")
-                dataGridView1.Columns["NC_PrestacionEnglobante"].Visible = false;
-        }
-    }
-
-
     private void dataGridView1_CellValueChanged(object sender, DataGridViewCellEventArgs e)
     {
         if (cargaPrimeraVez)
@@ -1365,16 +931,16 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         if (EsColumna(fila, e.ColumnIndex, "NC_MotivoDeDebito"))
             ProcesarCambioMotivoDeDebito(fila);
 
-        if ((FacturaTipo == "FC" || FacturaTipo == "ND") && EsColumna(fila, e.ColumnIndex, "NC_MotivoDeRefactura"))
+        if ((FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito) && EsColumna(fila, e.ColumnIndex, "NC_MotivoDeRefactura"))
             ProcesarCambioMotivoDeRefactura(fila);
 
-        if ((FacturaTipo == "FC" || FacturaTipo == "ND") && (EsColumna(fila, e.ColumnIndex, "NC_ImporteDeRefactura") || EsColumna(fila, e.ColumnIndex, "NC_ImporteDebitado")))
+        if ((FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito) && (EsColumna(fila, e.ColumnIndex, "NC_ImporteDeRefactura") || EsColumna(fila, e.ColumnIndex, "NC_ImporteDebitado")))
             ValidarYActualizarImporte(fila, e.ColumnIndex);
 
-        if ((FacturaTipo == "FC" || FacturaTipo == "ND") && EsColumna(fila, e.ColumnIndex, "NC_DiasFacturados"))
+        if ((FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito) && EsColumna(fila, e.ColumnIndex, "NC_DiasFacturados"))
             ProcesarCambioDiasFacturados(fila);
 
-        if (FacturaTipo == "NC" && EsColumna(fila, e.ColumnIndex, "ND_MotivoDeRefactura"))
+        if (FacturaTipo == TipoDocumento.NotaCredito && EsColumna(fila, e.ColumnIndex, "ND_MotivoDeRefactura"))
             ProcesarCambioMotivoDeRefacturaNC(fila);
 
         ProcesarReadOnlyYEstilosPorDebitoAceptado(fila, e.ColumnIndex);
@@ -1397,11 +963,11 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         fila.Cells["NC_DebitoAceptado"].ReadOnly = false;
         fila.Cells["NC_DebitoAceptado"].Style.BackColor = System.Drawing.Color.LightCyan;
 
-        if (motivoDebito == "Prestacion incluida en otra")
+        if (motivoDebito == MotivoDebito.IncluidaEnOtra)
         {
             fila.Cells["NC_PrestacionEnglobante"].ReadOnly = false;
         }
-        else if (FacturaTipo == "NC")
+        else if (FacturaTipo == TipoDocumento.NotaCredito)
         {
             fila.Cells["NC_PrestacionEnglobante"].ReadOnly = true;
             fila.Cells["NC_PrestacionEnglobante"].Style.BackColor = System.Drawing.Color.Gray;
@@ -1410,7 +976,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             foreach (DataGridViewRow row in dataGridView1.Rows)
             {
                 string motivoDebitoFilaActual = row.Cells["NC_MotivoDeDebito"].Value?.ToString();
-                if (motivoDebitoFilaActual == "Prestacion incluida en otra")
+                if (motivoDebitoFilaActual == MotivoDebito.IncluidaEnOtra)
                 {
                     control = true;
                     break;
@@ -1427,7 +993,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     {
         switch (FacturaTipo)
         {
-            case "FC":
+            case TipoDocumento.Factura:
                 if (fila.Cells["NC_ImporteDeRefactura"].Value != null && fila.Cells["NC_ImporteDeRefactura"].Value != DBNull.Value)
                 {
                     fila.Cells["NC_ImporteDeRefactura"].Value = fila.Cells["total_neto"].Value;
@@ -1435,7 +1001,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                     fila.Cells["NC_Comentarios"].Style.BackColor = System.Drawing.Color.LightGray;
                 }
                 break;
-            case "ND":
+            case TipoDocumento.NotaDebito:
                 fila.Cells["NC_ImporteDeRefactura"].Value = fila.Cells["importerefactura"].Value;
                 fila.Cells["NC_Comentarios"].ReadOnly = false;
                 fila.Cells["NC_Comentarios"].Style.BackColor = System.Drawing.Color.LightGray;
@@ -1443,10 +1009,10 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
 
         string motivoDeRefactura = fila.Cells["NC_MotivoDeRefactura"].Value?.ToString();
-        if (motivoDeRefactura == "Prestacion incluida en otra")
+        if (motivoDeRefactura == MotivoDebito.IncluidaEnOtra)
         {
             string codigoViejo = fila.Cells["codigo"].Value.ToString();
-            tipoATransmitir = "ND";
+            tipoATransmitir = TipoDocumento.NotaDebito;
             IngresoEnCasoDeCambioDePrestacion form2 = new IngresoEnCasoDeCambioDePrestacion
             {
                 codigoViejo = codigoViejo
@@ -1505,7 +1071,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     private void ProcesarReadOnlyYEstilosPorDebitoAceptado(DataGridViewRow fila, int columnIndex)
     {
         // FC
-        if (FacturaTipo == "FC")
+        if (FacturaTipo == TipoDocumento.Factura)
         {
             if (EsColumna(fila, columnIndex, "nc_importederefactura"))
                 GuardarValoresParaActualizarMontoDeRefactura();
@@ -1524,7 +1090,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
         }
         // NC
-        else if (FacturaTipo == "NC")
+        else if (FacturaTipo == TipoDocumento.NotaCredito)
         {
             if (EsColumna(fila, columnIndex, "nd_importederefactura"))
                 GuardarValoresParaActualizarMontoDeRefactura();
@@ -1543,7 +1109,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
         }
         // ND
-        else if (FacturaTipo == "ND")
+        else if (FacturaTipo == TipoDocumento.NotaDebito)
         {
             if (EsColumna(fila, columnIndex, "nc_importederefactura"))
                 GuardarValoresParaActualizarMontoDeRefactura();
@@ -1581,10 +1147,10 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             int columnaImporteTotal = 0;
             switch (FacturaTipo)
             {
-                case "FC":
+                case TipoDocumento.Factura:
                     columnaImporteTotal = dataGridView1.Columns["total"].Index;
                     break;
-                case "ND":
+                case TipoDocumento.NotaDebito:
                     columnaImporteTotal = dataGridView1.Columns["importerefactura"].Index;
                     break;
             }
@@ -1598,7 +1164,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
                     switch (FacturaTipo)
                     {
-                        case "FC":
+                        case TipoDocumento.Factura:
                             if (debitoAceptado)
                             {
                                 fila.Cells["NC_MotivoDeRefactura"].ReadOnly = true;
@@ -1616,7 +1182,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
                             break;
 
-                        case "NC":
+                        case TipoDocumento.NotaCredito:
                             if (debitoAceptado)
                             {
                                 fila.Cells["ND_MotivoDeRefactura"].ReadOnly = true;
@@ -1633,7 +1199,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                             }
                             break;
 
-                        case "ND":
+                        case TipoDocumento.NotaDebito:
                             if (debitoAceptado)
                             {
                                 fila.Cells["NC_MotivoDeRefactura"].ReadOnly = true;
@@ -1668,7 +1234,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                         celda.Value = debitoAceptado;
                         int columnaImporteTotal = 0;
                         int columnaImporteDebitado = dataGridView1.Columns["nc_importedebitado"].Index;
-                        if (FacturaTipo == "FC")
+                        if (FacturaTipo == TipoDocumento.Factura)
                         {
                             columnaImporteTotal = dataGridView1.Columns["total"].Index;
                         }
@@ -1683,7 +1249,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
                         switch (FacturaTipo)
                         {
-                            case "FC":
+                            case TipoDocumento.Factura:
                                 if (debitoAceptado)
                                 {
                                     dataGridView1.Rows[celda.RowIndex].Cells["NC_MotivoDeRefactura"].ReadOnly = true;
@@ -1701,7 +1267,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
                                 break;
 
-                            case "NC":
+                            case TipoDocumento.NotaCredito:
                                 if (debitoAceptado)
                                 {
                                     dataGridView1.Rows[celda.RowIndex].Cells["ND_MotivoDeRefactura"].ReadOnly = true;
@@ -1718,7 +1284,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                                 }
                                 break;
 
-                            case "ND":
+                            case TipoDocumento.NotaDebito:
                                 if (debitoAceptado)
                                 {
                                     dataGridView1.Rows[celda.RowIndex].Cells["NC_MotivoDeRefactura"].ReadOnly = true;
@@ -1766,7 +1332,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         switch (FacturaTipo)
         {
-            case "FC":
+            case TipoDocumento.Factura:
 
                 if (checkMotivoDeRefactura.Checked == true)
                 {
@@ -1951,7 +1517,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 }
                 break;
 
-            case "NC":
+            case TipoDocumento.NotaCredito:
                 if (checkMotivoDeRefactura.Checked == true)
                 {
                     int columnaMotivoDeRefacturaNC = 0;
@@ -2095,7 +1661,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 }
                 break;
 
-            case "ND":
+            case TipoDocumento.NotaDebito:
                 if (checkMotivoDeRefactura.Checked == true)
                 {
                     int columnaMotivoDeRefacturaNC = 0;
@@ -2333,7 +1899,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         foreach (var row in filasUnicas)
         {
-            if (FacturaTipo == "FC" || FacturaTipo == "ND")
+            if (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito)
             {
                 string[] columnas = { "nc_motivodedebito", "nc_importedebitado", "nc_debitoaceptado", "nc_motivoderefactura", "nc_importederefactura", "nc_comentarios", "nc_prestacionenglobante", "nc_diasfacturados" };
 
@@ -2349,7 +1915,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                     row.Cells["nc_comentarios"].Style.BackColor = System.Drawing.Color.Coral;
                 }
             }
-            else if (FacturaTipo == "NC")
+            else if (FacturaTipo == TipoDocumento.NotaCredito)
             {
                 string[] columnas = { "nd_motivoderefactura", "nd_importederefactura", "nd_comentarios" };
 
@@ -2492,13 +2058,13 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         // Solo aplicamos nuevamente el formato visual.
         switch (FacturaTipo)
         {
-            case "FC":
+            case TipoDocumento.Factura:
                 colorearColumnasFC();
                 break;
-            case "NC":
+            case TipoDocumento.NotaCredito:
                 colorearColumnasNC();
                 break;
-            case "ND":
+            case TipoDocumento.NotaDebito:
                 colorearColumnasND();
                 break;
         }
@@ -2642,13 +2208,13 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
             object diasFacturados = DBNull.Value;
 
-            if (FacturaTipo != "NC" && row["NC_DiasFacturados"] != DBNull.Value)
+            if (FacturaTipo != TipoDocumento.NotaCredito && row["NC_DiasFacturados"] != DBNull.Value)
                 diasFacturados = Convert.ToInt32(row["NC_DiasFacturados"]);
 
             string prestacionEnglobante = row["NC_PrestacionEnglobante"] != DBNull.Value ? row["NC_PrestacionEnglobante"].ToString() : "";
             string codigo = string.Empty;
 
-            if (FacturaTipo == "ND" && row["codigo"] != DBNull.Value)
+            if (FacturaTipo == TipoDocumento.NotaDebito && row["codigo"] != DBNull.Value)
                 codigo = row["codigo"].ToString();
 
             int index = listaValoresParaBorradoDeFiltros.FindIndex(x => x.idPrestacion == idPrestacion);
@@ -2686,7 +2252,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                     row.Cells["NC_ImporteDebitado"].Value = elemento.importeDebito;
                     row.Cells["NC_Comentarios"].Value = elemento.comentarios;
                     row.Cells["NC_DebitoAceptado"].Value = elemento.debitoAceptado;
-                    if (FacturaTipo != "NC")
+                    if (FacturaTipo != TipoDocumento.NotaCredito)
                     {
                         row.Cells["NC_DiasFacturados"].Value = elemento.diasFacturados ?? DBNull.Value;
                     }
@@ -2960,7 +2526,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         if (visible)
         {
-            if (FacturaTipo == "NC")
+            if (FacturaTipo == TipoDocumento.NotaCredito)
             {
                 filtroMotivoDebito.Visible = !visible;
                 checkPrestacionesSinDebito.Visible = !visible;
@@ -3012,10 +2578,10 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         if (visible)
         {
             // Si es FC o ND, solo se puede hacer Nota de Crédito
-            btnNuevaNotaDeCrédito.Visible = (FacturaTipo == "FC" || FacturaTipo == "ND");
+            btnNuevaNotaDeCrédito.Visible = (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito);
 
             // Si es NC, solo se puede hacer Nota de Débito
-            btnNuevaNotaDeDébito.Visible = (FacturaTipo == "NC");
+            btnNuevaNotaDeDébito.Visible = (FacturaTipo == TipoDocumento.NotaCredito);
         }
         else
         {
@@ -3195,7 +2761,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             return;
         }
 
-        var columnasAuditables = (FacturaTipo == "FC" || FacturaTipo == "ND")
+        var columnasAuditables = (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito)
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "nc_comentarios", "nc_prestacionenglobante", "nc_importederefactura", "nc_motivoderefactura", "nc_importedebitado", "nc_diasfacturados", "nc_motivodedebito", "nc_debitoaceptado" }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "nd_motivoderefactura", "nd_importederefactura", "nd_comentarios" };
 

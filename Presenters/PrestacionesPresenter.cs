@@ -135,13 +135,13 @@ namespace Debitos.Presenters
                     // Lógica de decisión centralizada en el Presentador
                     switch (_view.FacturaTipo)
                     {
-                        case "FC":
+                        case TipoDocumento.Factura:
                             _repository.GuardarCargaParcialFC(listaParaGuardar);
                             break;
-                        case "NC":
+                        case TipoDocumento.NotaCredito:
                             _repository.GuardarCargaParcialNC(listaParaGuardar, _view.FacturaTipo, _view.FacturaLetra, _view.FacturaPuntoDeVenta, _view.FacturaNumero);
                             break;
-                        case "ND":
+                        case TipoDocumento.NotaDebito:
                             _repository.GuardarCargaParcialND(listaParaGuardar, _view.FacturaTipo, _view.FacturaLetra, _view.FacturaPuntoDeVenta, _view.FacturaNumero);
                             break;
                     }
