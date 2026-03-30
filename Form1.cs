@@ -3,12 +3,7 @@ using Debitos.Models;
 using Debitos.Presenters;
 using Debitos.Repositories;
 using Debitos.Views;
-using DocumentFormat.OpenXml.Spreadsheet;
-using DocumentFormat.OpenXml.Wordprocessing;
-using Microsoft.Extensions.Configuration;
-using Npgsql;
 using System.Data;
-using System.Security.Cryptography;
 
 namespace Debitos;
 
@@ -20,8 +15,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     public event EventHandler GuardarParcialmenteEvent;
     public event EventHandler GenerarNotaDeCreditoEvent;
     private IngresoInformacionNotaDeCredito ingresoInformacionNotaDeCredito;
-
-    // Implementación de las propiedades para manejar la UI desde el Presentador
 
     public string TextoTotalRegistros
     {
@@ -63,12 +56,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 SetControlesVisibles(true);
             }
         }
-    }
-
-    public bool BotonBuscarVisible
-    {
-        get => btnBuscar.Visible;
-        set => btnBuscar.Visible = value;
     }
 
     // Implementación explícita de la interfaz para no romper la lógica de tus parámetros 'out'
@@ -638,16 +625,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         AplicarFiltrosActivos();
     }
 
-    private void habilitarFiltros()
-    {
-        cargaListaFecha = false;
-        cargaListaModulo = false;
-        cargaListaNumeroDeInternacion = false;
-        cargaListaPaciente = false;
-        cargaListaPrestacion = false;
-        cargaListaProfesional = false;
-    }
-
     private void filtroPrestacion_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargaListaPrestacion || filtroPrestacion.SelectedIndex <= 0) return;
@@ -851,7 +828,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
         btnBorrarFiltros.Visible = false;
     }
-
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargarSoloFiltroMotivoDebito == false)
@@ -1125,7 +1101,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
     }
 
-
     private void filtroDebitoAceptado_SelectedIndexChanged(object sender, EventArgs e)
     {
         bool debitoAceptado = false;
@@ -1318,7 +1293,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         debitoIndividual = true;
 
     }
-
     private void filtroMotivoDeRefactura_SelectedIndexChanged(object sender, EventArgs e)
     {
         string motivoDeRefacturaSeleccionadaNC = filtroMotivoDeRefactura.Text;
@@ -1861,26 +1835,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         ingresoInformacionNotaDeDebito.Show();
     }
 
-
-    public void resetearBusqueda()
-    {
-        dataGridView1.DataSource = null;
-        SetControlesVisibles(false);
-
-        filtroTipo.SelectedItem = null;
-        letra.Text = string.Empty;
-        puntodeventa.Text = string.Empty;
-        numero.Text = string.Empty;
-
-        FacturaLetraSeleccionado = false;
-        FacturaNumeroSeleccionado = false;
-        FacturaPuntoDeVentaSeleccionado = false;
-        FacturaTipoSeleccionado = false;
-
-        lblCantidadDeRegistrosConDebitoAceptado.Visible = false;
-        lblCantidadDeRegistrosFiltrados.Visible = false;
-    }
-
     private void btnLimpiarFila_Click(object sender, EventArgs e)
     {
         // 1. Forzar cierre de edición
@@ -2110,8 +2064,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         resetearVariables();
     }
 
-    // Evento cuando el usuario selecciona una fecha en el ComboBox
-
     private void comboFiltroFecha_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargaListaFecha || buscando || comboFiltroFecha.SelectedIndex <= 0) return;
@@ -2291,19 +2243,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         AplicarFiltrosActivos();
     }
 
-    private void lblModulo_Click(object sender, EventArgs e)
-    {
-        // Como usás este label para el título y para el valor filtrado, verificamos el texto:
-        if (lblModulo.Text.StartsWith("Módulo:"))
-        {
-            lblModulo.Text = "Módulo";
-            lblModulo.TextAlign = ContentAlignment.TopLeft;
-            filtroModulo.Visible = true;
-            filtroModulo.SelectedIndex = 0;
-            AplicarFiltrosActivos();
-        }
-    }
-
     private void lblNumeroDeInternacionSel_Click(object sender, EventArgs e)
     {
         lblNumeroDeInternacionSel.Visible = false;
@@ -2383,45 +2322,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
     }
 
-    private void GuardarValoresAntesDeDeshacerFiltroND()
-    {
-        DataTable dataTableActual = null;
-        if (dataGridView1.DataSource is BindingSource bs)
-            dataTableActual = bs.DataSource as DataTable;
-        else if (dataGridView1.DataSource is DataTable dt)
-            dataTableActual = dt;
-
-        if (dataTableActual == null) return;
-
-        DataRow[] filasFiltradas = dataTableActual.Select(
-            "(NC_MotivoDeRefactura IS NOT NULL AND NC_MotivoDeRefactura <> '') OR " +
-            "(NC_MotivoDeDebito IS NOT NULL AND NC_MotivoDeDebito <> '') OR " +
-            "(NC_DebitoAceptado = True)"
-        );
-
-        foreach (DataRow row in filasFiltradas)
-        {
-            int idPrestacion = Convert.ToInt32(row["id_prestacion"]);
-            object motivoRefactura = row["NC_MotivoDeRefactura"] != DBNull.Value ? row["NC_MotivoDeRefactura"] : "";
-            object motivoDebito = row["NC_MotivoDeDebito"] != DBNull.Value ? row["NC_MotivoDeDebito"] : "";
-            double? importeRefactura = row["NC_ImporteDeRefactura"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDeRefactura"]) : (double?)null;
-            double? importeDebito = row["NC_ImporteDebitado"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDebitado"]) : (double?)null;
-            string? comentarios = row["NC_Comentarios"] != DBNull.Value ? row["NC_Comentarios"].ToString().Replace("\0", "") : "";
-            bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
-            object diasFacturados = row["NC_DiasFacturados"] != DBNull.Value ? Convert.ToInt32(row["NC_DiasFacturados"]) : (object)DBNull.Value;
-            string? prestacionEnglobante = row["NC_PrestacionEnglobante"] != DBNull.Value ? row["NC_PrestacionEnglobante"].ToString() : "";
-            int? idNotaDeDebito = Convert.ToInt32(row["id"]);
-
-            int index = listaValoresParaBorradoDeFiltrosND.FindIndex(x => x.idPrestacion == idPrestacion);
-            var nuevoElemento = (idPrestacion, motivoRefactura, motivoDebito, importeRefactura, importeDebito, comentarios, debitoAceptado, diasFacturados, prestacionEnglobante, idNotaDeDebito);
-
-            if (index == -1)
-                listaValoresParaBorradoDeFiltrosND.Add(nuevoElemento);
-            else
-                listaValoresParaBorradoDeFiltrosND[index] = nuevoElemento;
-        }
-    }
-
     private void filtroNumeroDeInternacion_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargaListaNumeroDeInternacion || filtroNumeroDeInternacion.SelectedIndex <= 0) return;
@@ -2436,25 +2336,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
     {
         verHistorialDelDocumento = new VerHistorialDelDocumento(FacturaNumero, FacturaLetra, FacturaPuntoDeVenta, FacturaTipo);
         verHistorialDelDocumento.Show();
-    }
-
-    private void dataGridView1_CellFormatting_1(object sender, DataGridViewCellFormattingEventArgs e)
-    {
-        if (controlFormatting)
-        {
-            // Verificar si la celda pertenece a una columna numérica
-            if (dataGridView1.Columns[e.ColumnIndex].ValueType == typeof(decimal) ||
-                dataGridView1.Columns[e.ColumnIndex].ValueType == typeof(double) ||
-                dataGridView1.Columns[e.ColumnIndex].ValueType == typeof(float))
-            {
-                if (e.Value != null && e.Value != DBNull.Value)
-                {
-                    e.Value = string.Format("{0:0.00}", e.Value); // Mostrar con 2 decimales
-                    e.FormattingApplied = true; // Indicar que el formato fue aplicado
-                }
-            }
-        }
-
     }
 
     private void dataGridView1_DataError(object sender, DataGridViewDataErrorEventArgs e)
@@ -2655,19 +2536,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             case "codigo": cargaListaPrestacion = estado; break;
             case "modulo": cargaListaModulo = estado; break;
             case "fecha": cargaListaFecha = estado; break;
-        }
-    }
-
-    private void evitarErrores(string nombreColumna)
-    {
-        switch (nombreColumna.ToLower())
-        {
-            case "paciente": cargaListaPaciente = true; break;
-            case "nro_internacion":
-            case "nro_int": cargaListaNumeroDeInternacion = true; break;
-            case "medico": cargaListaProfesional = true; break;
-            case "codigo": cargaListaPrestacion = true; break;
-            case "modulo": cargaListaModulo = true; break;
         }
     }
 

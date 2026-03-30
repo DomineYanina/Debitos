@@ -66,15 +66,20 @@ namespace Debitos.Presenters
                 // Obtenemos los datos para procesar
                 DataTable datos = _view.ObtenerDataTableActual();
 
-                // Lógica de decisión que antes estaba en el Form1
-                if (_view.FacturaTipo == "FC")
+                // Extraemos los datos de la tabla, AHORA INCLUYENDO EL ID (Ver paso 2)
+                var lista = MapearDatosParaAuxiliar(datos);
+
+                // Lógica de decisión según el tipo de documento de origen
+                if (_view.FacturaTipo == "FC" || _view.FacturaTipo == Debitos.Models.TipoDocumento.Factura)
                 {
-                    // Aquí deberías llamar a un método que extraiga los datos de la tabla
-                    // (Moviendo la lógica de 'GuardarValoresAntesDeDeshacerFiltro' aquí)
-                    var lista = MapearDatosParaAuxiliar(datos);
                     _repository.InsertarAuxiliarNC_FC(lista, _usuarioAuditor, _view.TipoRegistroFiltrado);
                 }
-                // ... repetir lógica para ND si aplica ...
+                else if (_view.FacturaTipo == "ND" || _view.FacturaTipo == Debitos.Models.TipoDocumento.NotaDebito)
+                {
+                    // ACÁ ESTABA EL PROBLEMA: Llamamos al método que guarda en el auxiliar 
+                    // la información de la ND, asegurando que el ID viaje a la base de datos
+                    _repository.InsertarAuxiliarNC_ND(lista, _usuarioAuditor, _view.TipoRegistroFiltrado);
+                }
 
                 // Ordenar acciones a la vista
                 _view.AbrirFormularioNotaDeCredito(true, _usuarioAuditor);
@@ -86,33 +91,34 @@ namespace Debitos.Presenters
             }
         }
 
-        private List<(int, object?, object?, double?, double?, string?, bool, object?, string?, string?)> MapearDatosParaAuxiliar(DataTable dt)
+        private List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, int? idNotaDeDebito, string? codigo)> MapearDatosParaAuxiliar(DataTable dt)
         {
-            // Esta lista utiliza la tupla exacta que espera el método InsertarAuxiliarNC_FC del repositorio
-            var lista = new List<(int, object?, object?, double?, double?, string?, bool, object?, string?, string?)>();
+            var lista = new List<(int, object?, object?, double?, double?, string?, bool, object?, string?, int?, string?)>();
 
             foreach (DataRow row in dt.Rows)
             {
-                // 1. Extraer valores con seguridad verificando DBNull
                 bool debitoAceptado = row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
-                string motivoRefactura = row["NC_MotivoDeRefactura"]?.ToString();
-                string motivoDebito = row["NC_MotivoDeDebito"]?.ToString();
+                string? motivoRefactura = row["NC_MotivoDeRefactura"]?.ToString();
+                string? motivoDebito = row["NC_MotivoDeDebito"]?.ToString();
 
-                // 2. Criterio de inclusión: Solo agregamos la fila si el usuario cargó algún dato relevante
+                // Solo procesamos las filas donde el auditor cargó información
                 if (debitoAceptado || !string.IsNullOrEmpty(motivoRefactura) || !string.IsNullOrEmpty(motivoDebito))
                 {
-                    // Construimos la tupla mapeando las columnas del DataTable a los tipos del Repositorio
                     lista.Add((
-                        Convert.ToInt32(row["id_prestacion"]),
+                        Convert.ToInt32(row["ID_Prestacion"]),
                         string.IsNullOrEmpty(motivoRefactura) ? DBNull.Value : motivoRefactura,
                         string.IsNullOrEmpty(motivoDebito) ? DBNull.Value : motivoDebito,
                         row["NC_ImporteDeRefactura"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDeRefactura"]) : (double?)null,
                         row["NC_ImporteDebitado"] != DBNull.Value ? Convert.ToDouble(row["NC_ImporteDebitado"]) : (double?)null,
-                        row["NC_Comentarios"]?.ToString().Replace("\0", "").Trim(), // Limpieza de caracteres nulos
+                        row["NC_Comentarios"]?.ToString()?.Replace("\0", "").Trim(),
                         debitoAceptado,
-                        row.Table.Columns.Contains("NC_DiasFacturados") && row["NC_DiasFacturados"] != DBNull.Value ? row["NC_DiasFacturados"] : DBNull.Value,
+                        row.Table.Columns.Contains("NC_DiasFacturados") && row["NC_DiasFacturados"] != DBNull.Value ? Convert.ToInt32(row["NC_DiasFacturados"]) : DBNull.Value,
                         row["NC_PrestacionEnglobante"]?.ToString(),
-                        "" // El campo 'codigo' se envía vacío para Facturas (FC) según la lógica original
+
+                        // ESTA ES LA CLAVE: Extraemos el ID del DataTable para usarlo como id_notadedebito
+                        row.Table.Columns.Contains("id") && row["id"] != DBNull.Value ? Convert.ToInt32(row["id"]) : (int?)null,
+
+                        row.Table.Columns.Contains("codigo") ? row["codigo"]?.ToString() : null
                     ));
                 }
             }
@@ -155,7 +161,6 @@ namespace Debitos.Presenters
             }
         }
 
-        // Centralizamos la extracción de datos (antes estaba repetida en 3 métodos en Form1)
         private List<CargaParcialDTO> MapearDatosACargaParcial(DataView vistaDatos, string tipoFactura)
         {
             var lista = new List<CargaParcialDTO>();
@@ -174,6 +179,8 @@ namespace Debitos.Presenters
                 {
                     var dto = new CargaParcialDTO
                     {
+                        // ¡ACÁ ESTABA EL ERROR QUE ARROJABA EL 178801!
+                        // Antes mapeábamos "id_prestacion" que traía el código, ahora mapeamos el ID correcto
                         IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
                         DebitoAceptado = debitoAceptado,
                         MotivoDebito = motivoDebito,
@@ -186,13 +193,14 @@ namespace Debitos.Presenters
                         TipoRegistro = _view.TipoRegistroFiltrado
                     };
 
-                    if (tipoFactura != "FC")
+                    if (tipoFactura == "NC")
                     {
-                        dto.IdNotaDeCredito = Convert.ToInt32(row["id_prestacion"]);
+                        dto.IdNotaDeCredito = Convert.ToInt32(row["id"]); // Mantenemos coherencia
                         dto.Codigo = row.Table.Columns.Contains("codigo") ? row["codigo"]?.ToString() : null;
                     }
                     if (tipoFactura == "FC" || tipoFactura == "ND")
                     {
+                        dto.IdNotaDeDebito = Convert.ToInt32(row["id"]);
                         dto.PrestacionEnglobante = row.Table.Columns.Contains("nc_prestacionenglobante") ? row["nc_prestacionenglobante"]?.ToString() : null;
                         dto.DiasFacturados = row.Table.Columns.Contains("nc_diasfacturados") ? row["nc_diasfacturados"] : DBNull.Value;
                     }

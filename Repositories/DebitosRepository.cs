@@ -14,7 +14,6 @@ namespace Debitos.Repositories
             _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
         }
 
-        // Método genérico para ejecutar consultas (basado en el que ya tenías)
         private DataTable ExecuteQuery(string query, NpgsqlParameter[] parameters = null)
         {
             DataTable dataTable = new DataTable();
@@ -35,7 +34,6 @@ namespace Debitos.Repositories
             return dataTable;
         }
 
-        // Movemos la lógica de BuscarDocumentoYTipoRegistro acá
         public string ObtenerTipoRegistro(string tipoFactura, string letra, int ptoVta, int numero)
         {
             string query = tipoFactura switch
@@ -56,7 +54,6 @@ namespace Debitos.Repositories
             return dt.Rows.Count > 0 ? dt.Rows[0][0].ToString() : null;
         }
 
-        // Movemos la lógica de CargarDatosDocumento acá
         public DataTable ObtenerPrestacionesDocumento(string facturaTipo, string tipoRegistro, string letra, int ptoVta, int numero)
         {
             string query = "";
@@ -165,35 +162,33 @@ namespace Debitos.Repositories
             command.ExecuteNonQuery();
         }
 
-        public void InsertarAuxiliarNC_FC(List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, string? codigo)> lista, string usuario, string tipoRegistro)
+        public void InsertarAuxiliarNC_FC(List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, int? idNotaDeDebito, string? codigo)> lista, string usuario, string tipoRegistro)
         {
-            string comando = @"INSERT INTO auxnc 
-        (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro) 
-        VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @comentarios, @tiporegistro);";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
+
             try
             {
+                string query = @"INSERT INTO auxnc (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tiporegistro, comentarios, codigo) 
+                         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tiporegistro, @comentarios, @codigo)";
+
                 foreach (var item in lista)
                 {
-                    using var command = new NpgsqlCommand(comando, connection, transaction);
-                    command.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-                    command.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-                    command.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? DBNull.Value);
-
-                    // Acá está la solución al error:
-                    command.Parameters.AddWithValue("@prestacionenglobante", (object?)item.prestacionEnglobante ?? DBNull.Value);
-
-                    command.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@usuario", usuario);
-                    command.Parameters.AddWithValue("@tiporegistro", tipoRegistro);
-                    command.Parameters.AddWithValue("@comentarios", (object?)item.comentarios ?? "");
-                    command.ExecuteNonQuery();
+                    using var cmd = new NpgsqlCommand(query, connection, transaction);
+                    cmd.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
+                    cmd.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@importedebitado", (object?)item.importeDebito ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
+                    cmd.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@importederefactura", (object?)item.importeRefactura ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@prestacionenglobante", (object?)item.prestacionEnglobante ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@usuario", usuario);
+                    cmd.Parameters.AddWithValue("@tiporegistro", tipoRegistro);
+                    cmd.Parameters.AddWithValue("@comentarios", (object?)item.comentarios ?? "");
+                    cmd.Parameters.AddWithValue("@codigo", (object?)item.codigo ?? DBNull.Value);
+                    cmd.ExecuteNonQuery();
                 }
                 transaction.Commit();
             }
@@ -203,34 +198,44 @@ namespace Debitos.Repositories
                 throw;
             }
         }
-
-        public void InsertarAuxiliarNC_ND(List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, int? idNotaDeDebito)> lista, string usuario, string tipoRegistro)
+        
+        public void InsertarAuxiliarNC_ND(List<(int idPrestacion, object? motivoRefactura, object? motivoDebito, double? importeRefactura, double? importeDebito, string? comentarios, bool debitoAceptado, object? diasFacturados, string? prestacionEnglobante, int? idNotaDeDebito, string? codigo)> lista, string usuario, string tipoRegistro)
         {
-            string comandoND = @"INSERT INTO auxnc 
-    (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, id_notadedebito, comentarios, tiporegistro) 
-    VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @id_notadedebito, @comentarios, @tiporegistro);";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
+
             try
             {
+                string query = @"INSERT INTO auxnc (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tiporegistro, comentarios, id_notadedebito) 
+                         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tiporegistro, @comentarios, @id_notadedebito)";
+
                 foreach (var item in lista)
                 {
-                    using var commandND = new NpgsqlCommand(comandoND, connection, transaction);
-                    commandND.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
-                    commandND.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? DBNull.Value);
-                    commandND.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? DBNull.Value);
-                    commandND.Parameters.AddWithValue("@importedebitado", item.importeDebito ?? (object)DBNull.Value);
-                    commandND.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
-                    commandND.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? DBNull.Value);
-                    commandND.Parameters.AddWithValue("@importederefactura", item.importeRefactura ?? (object)DBNull.Value);
-                    commandND.Parameters.AddWithValue("@usuario", usuario);
-                    commandND.Parameters.AddWithValue("@tiporegistro", tipoRegistro);
-                    commandND.Parameters.AddWithValue("@id_notadedebito", item.idNotaDeDebito ?? (object)DBNull.Value);
-                    commandND.Parameters.AddWithValue("@comentarios", item.comentarios ?? "");
-                    commandND.ExecuteNonQuery();
+                    using var cmd = new NpgsqlCommand(query, connection, transaction);
+                    cmd.Parameters.AddWithValue("@id_prestacion", item.idPrestacion);
+                    cmd.Parameters.AddWithValue("@motivodedebito", item.motivoDebito ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@diasfacturados", item.diasFacturados ?? DBNull.Value);
+
+                    // CORREGIDO: Manejo de nulos para los importes
+                    cmd.Parameters.AddWithValue("@importedebitado", (object?)item.importeDebito ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@debitoaceptado", item.debitoAceptado);
+                    cmd.Parameters.AddWithValue("@motivoderefactura", item.motivoRefactura ?? DBNull.Value);
+
+                    // CORREGIDO: Manejo de nulos para los importes
+                    cmd.Parameters.AddWithValue("@importederefactura", (object?)item.importeRefactura ?? DBNull.Value);
+
+                    cmd.Parameters.AddWithValue("@prestacionenglobante", (object?)item.prestacionEnglobante ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@usuario", usuario);
+                    cmd.Parameters.AddWithValue("@tiporegistro", tipoRegistro);
+                    cmd.Parameters.AddWithValue("@comentarios", (object?)item.comentarios ?? "");
+
+                    // Inyectamos el ID clave para mantener la cadena
+                    cmd.Parameters.AddWithValue("@id_notadedebito", item.idNotaDeDebito.HasValue ? (object)item.idNotaDeDebito.Value : DBNull.Value);
+
+                    cmd.ExecuteNonQuery();
                 }
+
                 transaction.Commit();
             }
             catch
@@ -384,9 +389,6 @@ namespace Debitos.Repositories
 
         public void GuardarCargaParcialND(List<CargaParcialDTO> listaCarga, string tipoDocumento, string letra, int ptovta, int numero)
         {
-            string comandoUpdate = @"UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, usuario = @usuario, cargadocompletamente = @cargadocompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion;";
-            string comandoInsert = @"INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, cargadocompletamente, id_notadedebito, comentarios) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @cargadocompletamente, @id_notadedebito, @comentarios);";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
@@ -394,39 +396,46 @@ namespace Debitos.Repositories
             {
                 foreach (var item in listaCarga)
                 {
-                    // 1. Usamos nuestro método centralizado para limpiar e insertar en cargaincompleta
                     RegistrarCargaIncompleta(connection, transaction, item.IdPrestacion, tipoDocumento, letra, ptovta, numero);
 
-                    // 2. Intentamos el UPDATE de la Nota de Crédito asociada a la ND
+                    int idPadreND = (int)item.IdNotaDeDebito;
+
+                    // Consulta saneada en una sola línea
+                    string comandoUpdate = "UPDATE notadecredito SET motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, usuario = @usuario, cargadocompletamente = @cargadocompletamente, comentarios = @comentarios WHERE id_notadedebito = @idPadreND AND id_prestacion = @id_prestacion;";
+
                     using var commandUpdate = new NpgsqlCommand(comandoUpdate, connection, transaction);
                     commandUpdate.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    commandUpdate.Parameters.AddWithValue("@motivodedebito", item.MotivoDebito ?? DBNull.Value);
-                    commandUpdate.Parameters.AddWithValue("@diasfacturados", item.DiasFacturados ?? DBNull.Value);
-                    commandUpdate.Parameters.AddWithValue("@importedebitado", item.ImporteDebitado ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@idPadreND", idPadreND);
+                    commandUpdate.Parameters.AddWithValue("@motivodedebito", (object?)item.MotivoDebito ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@diasfacturados", (object?)item.DiasFacturados ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@importedebitado", (object?)item.ImporteDebitado ?? DBNull.Value);
                     commandUpdate.Parameters.AddWithValue("@debitoaceptado", item.DebitoAceptado);
-                    commandUpdate.Parameters.AddWithValue("@motivoderefactura", item.MotivoRefactura ?? DBNull.Value);
-                    commandUpdate.Parameters.AddWithValue("@importederefactura", item.ImporteRefactura ?? DBNull.Value);
-                    commandUpdate.Parameters.AddWithValue("@usuario", item.Usuario);
+                    commandUpdate.Parameters.AddWithValue("@motivoderefactura", (object?)item.MotivoRefactura ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@importederefactura", (object?)item.ImporteRefactura ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@usuario", (object?)item.Usuario ?? DBNull.Value);
                     commandUpdate.Parameters.AddWithValue("@cargadocompletamente", item.CargadoCompletamente);
                     commandUpdate.Parameters.AddWithValue("@comentarios", (object?)item.Comentarios ?? "");
 
                     int filasAfectadas = commandUpdate.ExecuteNonQuery();
 
-                    // 3. Si dio 0, no existía. Hacemos el INSERT.
                     if (filasAfectadas == 0)
                     {
+                        // Consulta saneada en una sola línea
+                        string comandoInsert = "INSERT INTO notadecredito (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, usuario, cargadocompletamente, id_notadedebito, comentarios) VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @usuario, @cargadocompletamente, @idPadreND, @comentarios);";
+
                         using var commandInsert = new NpgsqlCommand(comandoInsert, connection, transaction);
                         commandInsert.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                        commandInsert.Parameters.AddWithValue("@motivodedebito", item.MotivoDebito ?? DBNull.Value);
-                        commandInsert.Parameters.AddWithValue("@diasfacturados", item.DiasFacturados ?? DBNull.Value);
-                        commandInsert.Parameters.AddWithValue("@importedebitado", item.ImporteDebitado ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@idPadreND", idPadreND);
+                        commandInsert.Parameters.AddWithValue("@motivodedebito", (object?)item.MotivoDebito ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@diasfacturados", (object?)item.DiasFacturados ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@importedebitado", (object?)item.ImporteDebitado ?? DBNull.Value);
                         commandInsert.Parameters.AddWithValue("@debitoaceptado", item.DebitoAceptado);
-                        commandInsert.Parameters.AddWithValue("@motivoderefactura", item.MotivoRefactura ?? DBNull.Value);
-                        commandInsert.Parameters.AddWithValue("@importederefactura", item.ImporteRefactura ?? DBNull.Value);
-                        commandInsert.Parameters.AddWithValue("@usuario", item.Usuario);
+                        commandInsert.Parameters.AddWithValue("@motivoderefactura", (object?)item.MotivoRefactura ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@importederefactura", (object?)item.ImporteRefactura ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@usuario", (object?)item.Usuario ?? DBNull.Value);
                         commandInsert.Parameters.AddWithValue("@cargadocompletamente", item.CargadoCompletamente);
-                        commandInsert.Parameters.AddWithValue("@id_notadedebito", item.IdNotaDeDebito ?? (object)DBNull.Value);
                         commandInsert.Parameters.AddWithValue("@comentarios", (object?)item.Comentarios ?? "");
+
                         commandInsert.ExecuteNonQuery();
                     }
                 }
@@ -447,7 +456,8 @@ namespace Debitos.Repositories
 
             try
             {
-                string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro FROM auxnc WHERE usuario = @usuarioAuditor";
+                // 1. LEEMOS EL id_notadedebito DIRECTAMENTE DESDE EL AUXILIAR
+                string querySelect = "SELECT id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro, id_notadedebito FROM auxnc WHERE usuario = @usuarioAuditor";
                 var filasAuxnc = new List<object[]>();
                 using (var cmdSelect = new NpgsqlCommand(querySelect, connection, transaction))
                 {
@@ -460,12 +470,12 @@ namespace Debitos.Repositories
                         lector["id_prestacion"], lector["motivodedebito"], lector["diasfacturados"],
                         lector["importedebitado"], lector["debitoaceptado"], lector["motivoderefactura"],
                         lector["importederefactura"], lector["prestacionenglobante"], lector["usuario"],
-                        lector["comentarios"], lector["tiporegistro"]
+                        lector["comentarios"], lector["tiporegistro"],
+                        lector["id_notadedebito"] // Índice 11: TU VALOR CLAVE
                     });
                         }
                     }
                 }
-                
 
                 string querySelectIncompletos = @"SELECT id_prestacion FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
                 var filasIncompletas = new HashSet<int>();
@@ -477,105 +487,99 @@ namespace Debitos.Repositories
                     cmdIncompletos.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
                     using (var lector = cmdIncompletos.ExecuteReader())
                     {
-                        while (lector.Read())
-                            filasIncompletas.Add(Convert.ToInt32(lector["id_prestacion"]));
+                        while (lector.Read()) filasIncompletas.Add(Convert.ToInt32(lector["id_prestacion"]));
                     }
                 }
 
-                bool encontrado = false;
-
-                // CORRECCIÓN: Ahora actualizamos toda la información de auditoría y el tiporegistro
-                string queryActualizarRegistros = @"UPDATE notadecredito 
-                SET tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, fecha = @fecha, cargadocompletamente = @cargadocompletamente,
-                motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, 
-                debitoaceptado = @debitoaceptado, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, 
-                prestacionenglobante = @prestacionenglobante, usuario = @usuario, comentarios = @comentarios, tiporegistro = @tiporegistro
-                WHERE id_prestacion = @id_prestacion AND cargadocompletamente = @cargarcompletamente;";
-
-                string queryDeleteIncompletos = @"DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion;";
-
-                string queryUpsertNuevoRegistro = @"INSERT INTO notadecredito 
-                (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tipo, letra, ptovta, numero, fecha, comentarios, tiporegistro, cargadocompletamente) 
-                VALUES 
-                (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tipo, @letra, @ptovta, @numero, @fecha, @comentarios, @tiporegistro, true)
-                ON CONFLICT (id_prestacion) 
-                DO UPDATE SET 
-                tipo = EXCLUDED.tipo, letra = EXCLUDED.letra, ptovta = EXCLUDED.ptovta, 
-                numero = EXCLUDED.numero, fecha = EXCLUDED.fecha, cargadocompletamente = true,
-                motivodedebito = EXCLUDED.motivodedebito, diasfacturados = EXCLUDED.diasfacturados, 
-                importedebitado = EXCLUDED.importedebitado, debitoaceptado = EXCLUDED.debitoaceptado, 
-                motivoderefactura = EXCLUDED.motivoderefactura, importederefactura = EXCLUDED.importederefactura, 
-                prestacionenglobante = EXCLUDED.prestacionenglobante, usuario = EXCLUDED.usuario, 
-                comentarios = EXCLUDED.comentarios, tiporegistro = EXCLUDED.tiporegistro;";
+                bool relacionCreada = false;
 
                 foreach (var fila in filasAuxnc)
                 {
                     int idPrestacion = Convert.ToInt32(fila[0]);
 
-                    if (filasIncompletas.Contains(idPrestacion))
+                    // 2. EXTRAEMOS EL ID DEL PADRE DE LA MEMORIA (sin buscar en la base de datos)
+                    int? idPadreND = fila[11] != DBNull.Value ? Convert.ToInt32(fila[11]) : (int?)null;
+                    bool existeRegistro = false;
+
+                    // 3. ARMAMOS LA CONDICIÓN EXACTA BASADA EN TU LÓGICA
+                    string condicionPadre = idPadreND.HasValue ? "id_notadedebito = @id_notadedebito" : "id_notadedebito IS NULL";
+
+                    string queryComprobar = $"SELECT 1 FROM notadecredito WHERE id_prestacion = @id_prestacion AND {condicionPadre};";
+
+                    using (var cmdVerificar = new NpgsqlCommand(queryComprobar, connection, transaction))
                     {
-                        encontrado = true;
-                        using (var cmdUpdate = new NpgsqlCommand(queryActualizarRegistros, connection, transaction))
+                        cmdVerificar.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                        if (idPadreND.HasValue) cmdVerificar.Parameters.AddWithValue("@id_notadedebito", idPadreND.Value);
+                        existeRegistro = cmdVerificar.ExecuteScalar() != null;
+                    }
+
+                    Action<NpgsqlCommand> setParametrosComunes = (cmd) =>
+                    {
+                        cmd.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                        cmd.Parameters.AddWithValue("@id_notadedebito", idPadreND.HasValue ? (object)idPadreND.Value : DBNull.Value);
+                        cmd.Parameters.AddWithValue("@tipo", tipoDeArchivo);
+                        cmd.Parameters.AddWithValue("@letra", letraDestino);
+                        cmd.Parameters.AddWithValue("@ptovta", ptovtaDestino);
+                        cmd.Parameters.AddWithValue("@numero", numeroDestino);
+                        cmd.Parameters.AddWithValue("@fecha", fecha);
+                        cmd.Parameters.AddWithValue("@motivodedebito", fila[1] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@diasfacturados", fila[2] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@importedebitado", fila[3] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@debitoaceptado", fila[4]);
+                        cmd.Parameters.AddWithValue("@motivoderefactura", fila[5] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@importederefactura", fila[6] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@prestacionenglobante", fila[7] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@usuario", fila[8] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@comentarios", fila[9] ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@tiporegistro", fila[10] ?? DBNull.Value);
+                    };
+
+                    if (existeRegistro)
+                    {
+                        relacionCreada = true;
+                        string queryActualizar = $@"UPDATE notadecredito 
+                    SET fecha = @fecha, tipo = @tipo, letra = @letra, ptovta = @ptovta, numero = @numero, cargadocompletamente = true, 
+                    motivodedebito = @motivodedebito, diasfacturados = @diasfacturados, importedebitado = @importedebitado, debitoaceptado = @debitoaceptado, 
+                    motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, prestacionenglobante = @prestacionenglobante, 
+                    usuario = @usuario, comentarios = @comentarios, tiporegistro = @tiporegistro 
+                    WHERE id_prestacion = @id_prestacion AND {condicionPadre};";
+
+                        using (var cmdUpdate = new NpgsqlCommand(queryActualizar, connection, transaction))
                         {
-                            cmdUpdate.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-                            cmdUpdate.Parameters.AddWithValue("@tipo", tipoDeArchivo);
-                            cmdUpdate.Parameters.AddWithValue("@letra", letraDestino);
-                            cmdUpdate.Parameters.AddWithValue("@ptovta", ptovtaDestino);
-                            cmdUpdate.Parameters.AddWithValue("@numero", numeroDestino);
-                            cmdUpdate.Parameters.AddWithValue("@fecha", fecha);
-                            cmdUpdate.Parameters.AddWithValue("@cargadocompletamente", true);
-                            cmdUpdate.Parameters.AddWithValue("@cargarcompletamente", false);
-
-                            // Agregamos los parámetros que faltaban
-                            cmdUpdate.Parameters.AddWithValue("@motivodedebito", fila[1] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@diasfacturados", fila[2] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@importedebitado", fila[3] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@debitoaceptado", fila[4]);
-                            cmdUpdate.Parameters.AddWithValue("@motivoderefactura", fila[5] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@importederefactura", fila[6] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@prestacionenglobante", fila[7] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@usuario", fila[8] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@comentarios", fila[9] ?? DBNull.Value);
-                            cmdUpdate.Parameters.AddWithValue("@tiporegistro", fila[10] ?? DBNull.Value);
-
+                            setParametrosComunes(cmdUpdate);
                             cmdUpdate.ExecuteNonQuery();
                         }
 
-                        using (var cmdDelInc = new NpgsqlCommand(queryDeleteIncompletos, connection, transaction))
+                        if (filasIncompletas.Contains(idPrestacion))
                         {
-                            cmdDelInc.Parameters.AddWithValue("@id_prestacion", idPrestacion);
-                            cmdDelInc.ExecuteNonQuery();
+                            using (var cmdDelInc = new NpgsqlCommand("DELETE FROM cargaincompleta WHERE id_prestacion = @id_prestacion AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta;", connection, transaction))
+                            {
+                                cmdDelInc.Parameters.AddWithValue("@id_prestacion", idPrestacion);
+                                cmdDelInc.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
+                                cmdDelInc.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
+                                cmdDelInc.Parameters.AddWithValue("@FacturaLetra", facturaLetra);
+                                cmdDelInc.Parameters.AddWithValue("@FacturaPuntoDeVenta", facturaPuntoDeVenta);
+                                cmdDelInc.ExecuteNonQuery();
+                            }
                         }
                     }
                     else
                     {
-                        using (var cmdUpsert = new NpgsqlCommand(queryUpsertNuevoRegistro, connection, transaction))
+                        string queryInsertar = @"INSERT INTO notadecredito 
+                    (id_prestacion, tipo, letra, ptovta, numero, fecha, cargadocompletamente, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, comentarios, tiporegistro, id_notadedebito) 
+                    VALUES (@id_prestacion, @tipo, @letra, @ptovta, @numero, @fecha, true, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @comentarios, @tiporegistro, @id_notadedebito);";
+
+                        using (var cmdInsert = new NpgsqlCommand(queryInsertar, connection, transaction))
                         {
-                            cmdUpsert.Parameters.AddWithValue("@id_prestacion", fila[0]);
-                            cmdUpsert.Parameters.AddWithValue("@motivodedebito", fila[1] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@diasfacturados", fila[2] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@importedebitado", fila[3] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@debitoaceptado", fila[4]);
-                            cmdUpsert.Parameters.AddWithValue("@motivoderefactura", fila[5] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@importederefactura", fila[6] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@prestacionenglobante", fila[7] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@usuario", fila[8] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@comentarios", fila[9] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@tiporegistro", fila[10] ?? DBNull.Value);
-                            cmdUpsert.Parameters.AddWithValue("@letra", letraDestino);
-                            cmdUpsert.Parameters.AddWithValue("@ptovta", ptovtaDestino);
-                            cmdUpsert.Parameters.AddWithValue("@numero", numeroDestino);
-                            cmdUpsert.Parameters.AddWithValue("@fecha", fecha);
-                            cmdUpsert.Parameters.AddWithValue("@tipo", tipoDeArchivo);
-                            cmdUpsert.ExecuteNonQuery();
+                            setParametrosComunes(cmdInsert);
+                            cmdInsert.ExecuteNonQuery();
                         }
                     }
                 }
 
                 if (filasIncompletas.Count > 0)
                 {
-                    string queryEliminarFilasArchivoParcial = @"DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta";
-                    using (var cmdLimpieza = new NpgsqlCommand(queryEliminarFilasArchivoParcial, connection, transaction))
+                    using (var cmdLimpieza = new NpgsqlCommand("DELETE FROM cargaincompleta WHERE numero = @FacturaNumero AND tipodocumento = @TipoDocumento AND letra = @FacturaLetra AND ptovta = @FacturaPuntoDeVenta", connection, transaction))
                     {
                         cmdLimpieza.Parameters.AddWithValue("@FacturaNumero", facturaNumero);
                         cmdLimpieza.Parameters.AddWithValue("@TipoDocumento", facturaTipo);
@@ -585,7 +589,7 @@ namespace Debitos.Repositories
                     }
                 }
 
-                if (!encontrado)
+                if (!relacionCreada)
                 {
                     InsertarRelacionDocumento(connection, transaction, facturaTipo, facturaLetra, facturaPuntoDeVenta, facturaNumero, tipoDeArchivo, letraDestino, ptovtaDestino, numeroDestino);
                 }
@@ -604,7 +608,7 @@ namespace Debitos.Repositories
                 throw;
             }
         }
-
+        
         private void InsertarRelacionDocumento(NpgsqlConnection connection, NpgsqlTransaction transaction,
     string tipoOrigen, string letraOrigen, int ptovtaOrigen, int numeroOrigen,
     string tipoDestino, string letraDestino, int ptovtaDestino, int numeroDestino)
@@ -780,7 +784,6 @@ namespace Debitos.Repositories
             }
         }
 
-        // --- MÉTODOS PARA CAMBIO DE PRESTACIÓN ---
         public DataTable ObtenerCodigosPrestacionUnicos()
         {
             var dt = new DataTable();
@@ -819,7 +822,6 @@ namespace Debitos.Repositories
             }
         }
 
-        // --- MÉTODO PARA HISTORIAL DE DOCUMENTOS ---
         public DataTable ObtenerHistorialDocumento(string tipo, string letra, int ptovta, int numero)
         {
             DataTable historial = new DataTable();
@@ -920,5 +922,6 @@ namespace Debitos.Repositories
                 cmdIns.ExecuteNonQuery();
             }
         }
+    
     }
 }

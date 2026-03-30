@@ -34,7 +34,6 @@ namespace Debitos
             _repository = new DebitosRepository(DatabaseConfig.ConnectionString);
         }
 
-
         private void txtPuntoDeVenta_TextChanged(object sender, EventArgs e)
         {
             if (txtPuntoDeVenta.Text.Length > 0)
@@ -172,5 +171,6 @@ namespace Debitos
                 btnGuardar.Visible = false;
             }
         }
+
     }
 }
