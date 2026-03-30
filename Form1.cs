@@ -187,6 +187,9 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         InitializeComponent();
         usuario = _usuario;
 
+        dataGridView1.DoubleBuffered(true);
+        dataGridView1.AllowUserToResizeColumns = true;
+
         // Initialize non-nullable fields to default values to satisfy CS8618  
         pacienteFiltro = string.Empty;
         prestacionFiltro = string.Empty;
@@ -615,6 +618,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
         lblCantidadDeRegistrosFiltrados.Text = "Cantidad de registros filtrados: " + cantidadFilas;
     }
+
     private void filtroProfesional_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargaListaProfesional || filtroProfesional.SelectedIndex <= 0) return;
@@ -693,6 +697,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
     private void ConfigurarColumnasDataGridView(List<DataGridViewColumnConfig> configs)
     {
+        dataGridView1.AllowUserToResizeColumns = true;
         foreach (var config in configs)
         {
             if (!dataGridView1.Columns.Contains(config.Name))
@@ -705,6 +710,12 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 col.ReadOnly = config.ReadOnly.Value;
             if (!string.IsNullOrEmpty(config.HeaderText))
                 col.HeaderText = config.HeaderText;
+            if (config.Width.HasValue)
+            {
+                // Al establecer None, permitimos que el usuario arrastre el ancho con el mouse
+                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                col.Width = config.Width.Value;
+            }
 
             if ((FacturaTipo == TipoDocumento.Factura && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaDebito && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaCredito && config.Name == "nd_comentarios"))
             {
@@ -828,6 +839,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
         btnBorrarFiltros.Visible = false;
     }
+
     private void filtroMotivoDebito_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (cargarSoloFiltroMotivoDebito == false)
@@ -1293,6 +1305,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         debitoIndividual = true;
 
     }
+
     private void filtroMotivoDeRefactura_SelectedIndexChanged(object sender, EventArgs e)
     {
         string motivoDeRefacturaSeleccionadaNC = filtroMotivoDeRefactura.Text;
@@ -1902,63 +1915,88 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             return;
         }
 
-        // Activamos el cursor de carga para que el usuario sepa que el sistema está trabajando
         this.UseWaitCursor = true;
 
         try
         {
-            // 1. Crear una tabla en la memoria RAM solo con las columnas visibles
+            // 1. Crear una tabla en memoria para la exportación
             DataTable dtExport = new DataTable();
-            List<string> columnasVisiblesName = new List<string>();
 
+            // 2. Definir el orden obligatorio de las primeras 4 columnas (Nombres internos del DataTable)
+            var columnasAExportar = new List<string> { "carnet", "paciente", "Cobertura", "Plan" };
+
+            // 3. Agregar el resto de las columnas que son visibles en la interfaz
             foreach (DataGridViewColumn col in dataGridView1.Columns)
             {
-                if (col.Visible)
+                // Si la columna es visible y no es una de las 4 iniciales, la agregamos al final del listado
+                if (col.Visible && !columnasAExportar.Contains(col.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    // Asignamos el nombre visible como encabezado
-                    string header = string.IsNullOrWhiteSpace(col.HeaderText) ? col.Name : col.HeaderText;
-
-                    // Evitamos que Excel tire error si dos columnas tienen el mismo título
-                    if (dtExport.Columns.Contains(header)) header += "_" + col.Index;
-
-                    // Extraemos el tipo de dato original para que las fórmulas (sumas) en Excel sigan funcionando
-                    Type tipoColumna = col.ValueType ?? typeof(object);
-                    if (Nullable.GetUnderlyingType(tipoColumna) != null)
-                    {
-                        tipoColumna = Nullable.GetUnderlyingType(tipoColumna);
-                    }
-
-                    dtExport.Columns.Add(header, tipoColumna);
-                    columnasVisiblesName.Add(col.Name);
+                    columnasAExportar.Add(col.Name);
                 }
             }
 
-            // 2. Extraer los datos leyendo directamente la fuente de memoria (Ultra Rápido)
-            // Al usar bindingSource, garantizamos que se respeta exactamente lo que el auditor filtró/ordenó
+            // 4. Crear las columnas en el DataTable de exportación con sus respectivos títulos
+            foreach (string internalName in columnasAExportar)
+            {
+                // Buscamos la configuración en la grilla para obtener el HeaderText traducido
+                DataGridViewColumn gridCol = dataGridView1.Columns.Cast<DataGridViewColumn>()
+                    .FirstOrDefault(c => string.Equals(c.Name, internalName, StringComparison.OrdinalIgnoreCase));
+
+                string headerText = gridCol != null ? gridCol.HeaderText : internalName;
+
+                // Asignamos nombres amigables para las columnas que suelen estar ocultas
+                if (internalName.Equals("carnet", StringComparison.OrdinalIgnoreCase)) headerText = "Carnet";
+                if (internalName.Equals("Cobertura", StringComparison.OrdinalIgnoreCase)) headerText = "Cobertura";
+
+                // Limpiamos el texto de cabecera (quitamos saltos de línea para Excel)
+                headerText = headerText.Replace("\n", " ").Replace("\r", " ").Trim();
+
+                // Evitamos errores de nombres duplicados en el DataTable
+                string finalHeader = headerText;
+                int counter = 1;
+                while (dtExport.Columns.Contains(finalHeader))
+                    finalHeader = headerText + "_" + (counter++);
+
+                // Intentamos detectar el tipo de dato original para mantener el formato numérico en Excel
+                Type tipoDato = typeof(object);
+                if (gridCol != null && gridCol.ValueType != null)
+                {
+                    tipoDato = Nullable.GetUnderlyingType(gridCol.ValueType) ?? gridCol.ValueType;
+                }
+                else if (bindingSource.DataSource is DataTable sourceDt && sourceDt.Columns.Contains(internalName))
+                {
+                    tipoDato = Nullable.GetUnderlyingType(sourceDt.Columns[internalName].DataType) ?? sourceDt.Columns[internalName].DataType;
+                }
+
+                dtExport.Columns.Add(finalHeader, tipoDato);
+            }
+
+            // 5. Poblar el DataTable con los datos reales del BindingSource
             foreach (DataRowView rowView in bindingSource)
             {
                 DataRow newRow = dtExport.NewRow();
-                for (int i = 0; i < columnasVisiblesName.Count; i++)
+                for (int i = 0; i < columnasAExportar.Count; i++)
                 {
-                    newRow[i] = rowView[columnasVisiblesName[i]] ?? DBNull.Value;
+                    string colName = columnasAExportar[i];
+                    if (rowView.Row.Table.Columns.Contains(colName))
+                    {
+                        newRow[i] = rowView[colName] ?? DBNull.Value;
+                    }
                 }
                 dtExport.Rows.Add(newRow);
             }
 
-            // 3. Inyectar todo en Excel de un solo golpe
+            // 6. Generar el archivo Excel usando ClosedXML
             using (XLWorkbook workbook = new XLWorkbook())
             {
                 var worksheet = workbook.Worksheets.Add("Auditoría");
-
-                // InsertTable procesa miles de filas en milisegundos y le da formato
                 var tablaExcel = worksheet.Cell(1, 1).InsertTable(dtExport);
-                tablaExcel.Theme = XLTableTheme.TableStyleMedium2; // Diseño estético de tabla oficial de Excel
-                worksheet.Columns().AdjustToContents(); // Auto-ajustar el ancho de las columnas al texto
+                tablaExcel.Theme = XLTableTheme.TableStyleMedium2;
+                worksheet.Columns().AdjustToContents();
 
                 SaveFileDialog saveFileDialog1 = new SaveFileDialog
                 {
                     Filter = "Excel Files (*.xlsx)|*.xlsx",
-                    // Sugerimos un nombre inteligente para ahorrarle tiempo al auditor
                     FileName = $"Auditoria_{FacturaTipo}_{FacturaLetra}-{FacturaPuntoDeVenta:D4}-{FacturaNumero:D8}.xlsx"
                 };
 
@@ -2569,6 +2607,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             return false;
         }
     }
+
     private void ActualizarFiltrosDisponibles(DataView vistaFiltrada)
     {
         tablasFiltrosPaciente.Clear();
@@ -2682,7 +2721,5 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         _presenter.RecalcularTotales();
         dataGridView1.Refresh();
     }
-
-
 
 }
