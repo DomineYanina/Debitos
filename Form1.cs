@@ -935,13 +935,14 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
 
         cargaPrimeraVez = false;
         dataGridView1.Refresh();
-        if (debitoIndividual)
-            _presenter.RecalcularTotales();
+
+        _presenter.RecalcularTotales();
     }
 
     private bool EsColumna(DataGridViewRow fila, int columnIndex, string nombreColumna)
     {
-        return dataGridView1.Columns[columnIndex].Name == nombreColumna;
+        // Ignoramos diferencias de mayúsculas/minúsculas al comparar los nombres de las columnas
+        return string.Equals(dataGridView1.Columns[columnIndex].Name, nombreColumna, StringComparison.OrdinalIgnoreCase);
     }
 
     private void ProcesarCambioMotivoDeDebito(DataGridViewRow fila)
@@ -973,8 +974,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             if (control)
                 dataGridView1.Columns["NC_PrestacionEnglobante"].Visible = true;
         }
-
-        GuardarValoresParaActualizarMontoAuditados();
     }
 
     private void ProcesarCambioMotivoDeRefactura(DataGridViewRow fila)
@@ -2166,8 +2165,6 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
             }
         }
 
-        lblMontosNoAceptados.Text = "Suma total de débitos a refacturar: " + importeTotal.ToString("C");
-        lblMontosNoAceptados.Visible = true;
     }
 
     private void GuardarValoresAntesDeDeshacerFiltro()

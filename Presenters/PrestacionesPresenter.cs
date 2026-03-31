@@ -36,22 +36,45 @@ namespace Debitos.Presenters
             try
             {
                 // 1. Contar cuántas filas tienen débito aceptado
-                // Usamos la columna real del DataTable, no la de la Grilla
                 int filasAceptadas = dt.Select("nc_debitoaceptado = true").Length;
 
                 // 2. Sumar el importe total debitado
-                // .Compute permite hacer sumas filtradas directamente
                 object sumDebito = dt.Compute("SUM(nc_importedebitado)", "nc_debitoaceptado = true");
                 double totalDebitado = sumDebito != DBNull.Value ? Convert.ToDouble(sumDebito) : 0;
 
-                // 3. Actualizar la Vista
+                // 3. NUEVO: Sumar el importe total a refacturar
+                // Determinamos la columna dinámicamente según el tipo de documento auditado
+                string colRefactura = _view.FacturaTipo == "NC" ? "ND_ImporteDeRefactura" : "NC_ImporteDeRefactura";
+
+                double totalRefacturar = 0;
+                if (dt.Columns.Contains(colRefactura))
+                {
+                    // Sumamos iterando fila por fila para tener un control estricto de los valores DBNull
+                    foreach (DataRow row in dt.Rows)
+                    {
+                        // El importe a refacturar se suma cuando el débito NO está aceptado
+                        bool aceptado = row.Table.Columns.Contains("nc_debitoaceptado") &&
+                                        row["nc_debitoaceptado"] != DBNull.Value &&
+                                        Convert.ToBoolean(row["nc_debitoaceptado"]);
+
+                        if (!aceptado && row[colRefactura] != DBNull.Value)
+                        {
+                            totalRefacturar += Convert.ToDouble(row[colRefactura]);
+                        }
+                    }
+                }
+
+                // 4. Actualizar la Vista
                 _view.TextoTotalRegistros = $"Total Registros: {dt.Rows.Count} | Aceptados: {filasAceptadas}";
-                _view.TextoMontosNoAceptados = $"Total Debitado: {totalDebitado:C2}";
+
+                // Inyectamos el nuevo total en la misma etiqueta visual
+                _view.TextoMontosNoAceptados = $"Total Debitado: {totalDebitado:C2}   |   Total a Refacturar: {totalRefacturar:C2}";
+
                 _view.VisibilidadTotales = true;
             }
             catch (Exception)
             {
-                // Si algo falla (ej. columna inexistente), ocultamos por seguridad
+                // Si algo falla, ocultamos por seguridad
                 _view.VisibilidadTotales = false;
             }
         }
