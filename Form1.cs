@@ -551,13 +551,13 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         if (checkPrestacionesSinRefactura.Checked)
         {
             if (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito)
-                filtros.Add("(nc_motivoderefactura IS NULL OR nc_motivoderefactura = '')");
+                filtros.Add("(NC_MotivoDeRefactura IS NULL OR NC_MotivoDeRefactura = '')");
             else if (FacturaTipo == TipoDocumento.NotaCredito)
-                filtros.Add("(nd_motivoderefactura IS NULL OR nd_motivoderefactura = '')");
+                filtros.Add("(ND_MotivoDeRefactura IS NULL OR ND_MotivoDeRefactura = '')");
         }
 
         if (checkPrestacionesSinDebito.Checked)
-            filtros.Add("(nc_motivodedebito IS NULL OR nc_motivodedebito = '')");
+            filtros.Add("(NC_MotivoDeDebito IS NULL OR NC_MotivoDeDebito = '')");
 
         if (soloPrestacionesValorizadas.Checked)
             filtros.Add("total <> 0");
@@ -717,14 +717,20 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
                 col.Width = config.Width.Value;
             }
 
-            if ((FacturaTipo == TipoDocumento.Factura && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaDebito && config.Name == "nc_comentarios") || (FacturaTipo == TipoDocumento.NotaCredito && config.Name == "nd_comentarios"))
+            // Celdas de texto largo: Quitamos el "Fill" que rompe el scroll y asignamos un ancho fijo generoso
+            if ((FacturaTipo == TipoDocumento.Factura && config.Name == "nc_comentarios") ||
+                (FacturaTipo == TipoDocumento.NotaDebito && config.Name == "nc_comentarios") ||
+                (FacturaTipo == TipoDocumento.NotaCredito && config.Name == "nd_comentarios"))
             {
-                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                col.Width = 350;
             }
 
+            // Celdas de importes: Quitamos el "AllCells" que causa saltos al intentar editar
             if (config.Name == "NC_ImporteDebitado" || config.Name == "NC_ImporteDeRefactura")
             {
-                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
+                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                col.Width = 130;
             }
             if (config.Name == "NC_MotivoDeRefactura" || config.Name == "NC_MotivoDeDebito" || config.Name == "nd_MotivoDeRefactura")
             {

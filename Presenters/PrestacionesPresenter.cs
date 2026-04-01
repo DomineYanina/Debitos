@@ -192,25 +192,27 @@ namespace Debitos.Presenters
             {
                 DataRow row = rowView.Row;
 
-                bool debitoAceptado = row.Table.Columns.Contains("nc_debitoaceptado") && row["nc_debitoaceptado"] != DBNull.Value && Convert.ToBoolean(row["nc_debitoaceptado"]);
-                string motivoDebito = row.Table.Columns.Contains("nc_motivodedebito") ? row["nc_motivodedebito"]?.ToString() ?? "" : "";
+                // Usamos los alias exactos (mayúsculas) que vienen de la base de datos
+                bool debitoAceptado = row.Table.Columns.Contains("NC_DebitoAceptado") && row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
+                string motivoDebito = row.Table.Columns.Contains("NC_MotivoDeDebito") ? row["NC_MotivoDeDebito"]?.ToString() ?? "" : "";
 
-                string columnaRefactura = tipoFactura == "NC" ? "nd_motivoderefactura" : "nc_motivoderefactura";
+                string columnaRefactura = tipoFactura == "NC" ? "ND_MotivoDeRefactura" : "NC_MotivoDeRefactura";
                 string motivoRefactura = row.Table.Columns.Contains(columnaRefactura) ? row[columnaRefactura]?.ToString() ?? "" : "";
 
                 if (debitoAceptado || !string.IsNullOrEmpty(motivoDebito) || !string.IsNullOrEmpty(motivoRefactura))
                 {
                     var dto = new CargaParcialDTO
                     {
-                        // ¡ACÁ ESTABA EL ERROR QUE ARROJABA EL 178801!
-                        // Antes mapeábamos "id_prestacion" que traía el código, ahora mapeamos el ID correcto
-                        IdPrestacion = Convert.ToInt32(row["id_prestacion"]),
+                        IdPrestacion = Convert.ToInt32(row["ID_Prestacion"]),
                         DebitoAceptado = debitoAceptado,
                         MotivoDebito = motivoDebito,
-                        ImporteDebitado = row.Table.Columns.Contains("nc_importedebitado") ? row["nc_importedebitado"] : DBNull.Value,
+                        ImporteDebitado = row.Table.Columns.Contains("NC_ImporteDebitado") ? row["NC_ImporteDebitado"] : DBNull.Value,
                         MotivoRefactura = motivoRefactura,
-                        ImporteRefactura = tipoFactura == "NC" ? row["nd_importederefactura"] : row["nc_importederefactura"],
-                        Comentarios = tipoFactura == "NC" ? row["nd_comentarios"]?.ToString() : row["nc_comentarios"]?.ToString(),
+
+                        // Asignaciones dinámicas seguras validando que la columna exista
+                        ImporteRefactura = tipoFactura == "NC" && row.Table.Columns.Contains("ND_ImporteDeRefactura") ? row["ND_ImporteDeRefactura"] : (row.Table.Columns.Contains("NC_ImporteDeRefactura") ? row["NC_ImporteDeRefactura"] : DBNull.Value),
+                        Comentarios = tipoFactura == "NC" && row.Table.Columns.Contains("ND_Comentarios") ? row["ND_Comentarios"]?.ToString() : (row.Table.Columns.Contains("NC_Comentarios") ? row["NC_Comentarios"]?.ToString() : null),
+
                         CargadoCompletamente = false,
                         Usuario = _usuarioAuditor,
                         TipoRegistro = _view.TipoRegistroFiltrado
@@ -218,14 +220,16 @@ namespace Debitos.Presenters
 
                     if (tipoFactura == "NC")
                     {
-                        dto.IdNotaDeCredito = Convert.ToInt32(row["id"]); // Mantenemos coherencia
+                        // Validación CRÍTICA: Controlamos si existe "id" antes de asignarla
+                        dto.IdNotaDeCredito = row.Table.Columns.Contains("id") && row["id"] != DBNull.Value ? Convert.ToInt32(row["id"]) : (int?)null;
                         dto.Codigo = row.Table.Columns.Contains("codigo") ? row["codigo"]?.ToString() : null;
                     }
                     if (tipoFactura == "FC" || tipoFactura == "ND")
                     {
-                        dto.IdNotaDeDebito = Convert.ToInt32(row["id"]);
-                        dto.PrestacionEnglobante = row.Table.Columns.Contains("nc_prestacionenglobante") ? row["nc_prestacionenglobante"]?.ToString() : null;
-                        dto.DiasFacturados = row.Table.Columns.Contains("nc_diasfacturados") ? row["nc_diasfacturados"] : DBNull.Value;
+                        // Validación CRÍTICA: Controlamos si existe "id" antes de asignarla
+                        dto.IdNotaDeDebito = row.Table.Columns.Contains("id") && row["id"] != DBNull.Value ? Convert.ToInt32(row["id"]) : (int?)null;
+                        dto.PrestacionEnglobante = row.Table.Columns.Contains("NC_PrestacionEnglobante") ? row["NC_PrestacionEnglobante"]?.ToString() : null;
+                        dto.DiasFacturados = row.Table.Columns.Contains("NC_DiasFacturados") ? row["NC_DiasFacturados"] : DBNull.Value;
                     }
 
                     lista.Add(dto);
