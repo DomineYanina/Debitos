@@ -285,53 +285,55 @@ namespace Debitos.Repositories
             }
         }
 
-        public void GuardarCargaParcialFC(List<CargaParcialDTO> listaCarga)
+        public void GuardarCargaParcialFC(List<CargaParcialDTO> listaCarga, string tipoDocumento, string letra, int ptovta, int numero)
         {
-            // El comando UPSERT nativo de PostgreSQL
-            string comandoUpsert = @"
-        INSERT INTO notadecredito 
-        (id_prestacion, debitoaceptado, motivodedebito, importedebitado, 
-        diasfacturados, motivoderefactura, importederefactura, prestacionenglobante, comentarios, 
-        cargadocompletamente, usuario) 
-        VALUES (@id_prestacion, @debitoaceptado, @motivodedebito, 
-        @importedebitado, @diasfacturados, @motivoderefactura, @importederefactura, @prestacionenglobante, 
-        @comentarios, @cargadocompletamente, @usuario)
-        ON CONFLICT (id_prestacion) 
-        DO UPDATE SET 
-        debitoaceptado = EXCLUDED.debitoaceptado,
-        motivodedebito = EXCLUDED.motivodedebito,
-        importedebitado = EXCLUDED.importedebitado,
-        diasfacturados = EXCLUDED.diasfacturados,
-        motivoderefactura = EXCLUDED.motivoderefactura,
-        importederefactura = EXCLUDED.importederefactura,
-        prestacionenglobante = EXCLUDED.prestacionenglobante,
-        comentarios = EXCLUDED.comentarios,
-        cargadocompletamente = EXCLUDED.cargadocompletamente,
-        usuario = EXCLUDED.usuario;";
-
             using var connection = new NpgsqlConnection(_connectionString);
             connection.Open();
             using var transaction = connection.BeginTransaction();
-
             try
             {
                 foreach (var item in listaCarga)
                 {
-                    using var command = new NpgsqlCommand(comandoUpsert, connection, transaction);
+                    RegistrarCargaIncompleta(connection, transaction, item.IdPrestacion, tipoDocumento, letra, ptovta, numero);
 
-                    command.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
-                    command.Parameters.AddWithValue("@debitoaceptado", item.DebitoAceptado);
-                    command.Parameters.AddWithValue("@motivodedebito", item.MotivoDebito ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@importedebitado", item.ImporteDebitado ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@diasfacturados", item.DiasFacturados ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@motivoderefactura", item.MotivoRefactura ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@importederefactura", item.ImporteRefactura ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@prestacionenglobante", (object?)item.PrestacionEnglobante ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@comentarios", (object?)item.Comentarios ?? "");
-                    command.Parameters.AddWithValue("@cargadocompletamente", item.CargadoCompletamente);
-                    command.Parameters.AddWithValue("@usuario", item.Usuario);
+                    // 1. Intentamos actualizar asumiendo que la NC ya existe y viene directo de la Factura (sin padre)
+                    string comandoUpdate = "UPDATE notadecredito SET debitoaceptado = @debitoaceptado, motivodedebito = @motivodedebito, importedebitado = @importedebitado, diasfacturados = @diasfacturados, motivoderefactura = @motivoderefactura, importederefactura = @importederefactura, prestacionenglobante = @prestacionenglobante, comentarios = @comentarios, cargadocompletamente = @cargadocompletamente, usuario = @usuario WHERE id_prestacion = @id_prestacion AND id_notadedebito IS NULL;";
 
-                    command.ExecuteNonQuery();
+                    using var commandUpdate = new NpgsqlCommand(comandoUpdate, connection, transaction);
+                    commandUpdate.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
+                    commandUpdate.Parameters.AddWithValue("@debitoaceptado", item.DebitoAceptado);
+                    commandUpdate.Parameters.AddWithValue("@motivodedebito", (object?)item.MotivoDebito ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@importedebitado", (object?)item.ImporteDebitado ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@diasfacturados", (object?)item.DiasFacturados ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@motivoderefactura", (object?)item.MotivoRefactura ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@importederefactura", (object?)item.ImporteRefactura ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@prestacionenglobante", (object?)item.PrestacionEnglobante ?? DBNull.Value);
+                    commandUpdate.Parameters.AddWithValue("@comentarios", (object?)item.Comentarios ?? "");
+                    commandUpdate.Parameters.AddWithValue("@cargadocompletamente", item.CargadoCompletamente);
+                    commandUpdate.Parameters.AddWithValue("@usuario", (object?)item.Usuario ?? DBNull.Value);
+
+                    int filasAfectadas = commandUpdate.ExecuteNonQuery();
+
+                    // 2. Si no actualizó nada, es un registro nuevo, así que Insertamos
+                    if (filasAfectadas == 0)
+                    {
+                        string comandoInsert = "INSERT INTO notadecredito (id_prestacion, debitoaceptado, motivodedebito, importedebitado, diasfacturados, motivoderefactura, importederefactura, prestacionenglobante, comentarios, cargadocompletamente, usuario) VALUES (@id_prestacion, @debitoaceptado, @motivodedebito, @importedebitado, @diasfacturados, @motivoderefactura, @importederefactura, @prestacionenglobante, @comentarios, @cargadocompletamente, @usuario);";
+
+                        using var commandInsert = new NpgsqlCommand(comandoInsert, connection, transaction);
+                        commandInsert.Parameters.AddWithValue("@id_prestacion", item.IdPrestacion);
+                        commandInsert.Parameters.AddWithValue("@debitoaceptado", item.DebitoAceptado);
+                        commandInsert.Parameters.AddWithValue("@motivodedebito", (object?)item.MotivoDebito ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@importedebitado", (object?)item.ImporteDebitado ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@diasfacturados", (object?)item.DiasFacturados ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@motivoderefactura", (object?)item.MotivoRefactura ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@importederefactura", (object?)item.ImporteRefactura ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@prestacionenglobante", (object?)item.PrestacionEnglobante ?? DBNull.Value);
+                        commandInsert.Parameters.AddWithValue("@comentarios", (object?)item.Comentarios ?? "");
+                        commandInsert.Parameters.AddWithValue("@cargadocompletamente", item.CargadoCompletamente);
+                        commandInsert.Parameters.AddWithValue("@usuario", (object?)item.Usuario ?? DBNull.Value);
+
+                        commandInsert.ExecuteNonQuery();
+                    }
                 }
                 transaction.Commit();
             }
@@ -341,7 +343,6 @@ namespace Debitos.Repositories
                 throw;
             }
         }
-
         public void GuardarCargaParcialNC(List<CargaParcialDTO> listaCarga, string tipoDocumento, string letra, int ptovta, int numero)
         {
             string comandoUpdate = @"UPDATE notadedebito SET motivorefactura = @motivoderefactura, importerefactura = @importederefactura, usuario = @usuario, codigo = @codigo, cargadocompletamente = @cargadocompletamente, comentarios = @comentarios WHERE id_prestacion = @id_prestacion;";

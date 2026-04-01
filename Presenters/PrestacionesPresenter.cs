@@ -165,7 +165,7 @@ namespace Debitos.Presenters
                     switch (_view.FacturaTipo)
                     {
                         case TipoDocumento.Factura:
-                            _repository.GuardarCargaParcialFC(listaParaGuardar);
+                            _repository.GuardarCargaParcialFC(listaParaGuardar, _view.FacturaTipo, _view.FacturaLetra, _view.FacturaPuntoDeVenta, _view.FacturaNumero);
                             break;
                         case TipoDocumento.NotaCredito:
                             _repository.GuardarCargaParcialNC(listaParaGuardar, _view.FacturaTipo, _view.FacturaLetra, _view.FacturaPuntoDeVenta, _view.FacturaNumero);
@@ -184,6 +184,19 @@ namespace Debitos.Presenters
             }
         }
 
+        // Método ayudante para leer valores blindando problemas de mayúsculas/minúsculas
+        private object ObtenerValorSeguro(DataRow row, string columnName)
+        {
+            foreach (DataColumn col in row.Table.Columns)
+            {
+                if (string.Equals(col.ColumnName, columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return row[col];
+                }
+            }
+            return DBNull.Value;
+        }
+
         private List<CargaParcialDTO> MapearDatosACargaParcial(DataView vistaDatos, string tipoFactura)
         {
             var lista = new List<CargaParcialDTO>();
@@ -192,26 +205,34 @@ namespace Debitos.Presenters
             {
                 DataRow row = rowView.Row;
 
-                // Usamos los alias exactos (mayúsculas) que vienen de la base de datos
-                bool debitoAceptado = row.Table.Columns.Contains("NC_DebitoAceptado") && row["NC_DebitoAceptado"] != DBNull.Value && Convert.ToBoolean(row["NC_DebitoAceptado"]);
-                string motivoDebito = row.Table.Columns.Contains("NC_MotivoDeDebito") ? row["NC_MotivoDeDebito"]?.ToString() ?? "" : "";
+                // Extraemos los valores ignorando por completo mayúsculas y minúsculas usando el ayudante
+                object debitoAceptadoObj = ObtenerValorSeguro(row, "NC_DebitoAceptado");
+                bool debitoAceptado = debitoAceptadoObj != DBNull.Value && Convert.ToBoolean(debitoAceptadoObj);
+
+                object motivoDebitoObj = ObtenerValorSeguro(row, "NC_MotivoDeDebito");
+                string motivoDebito = motivoDebitoObj != DBNull.Value ? motivoDebitoObj.ToString() : "";
 
                 string columnaRefactura = tipoFactura == "NC" ? "ND_MotivoDeRefactura" : "NC_MotivoDeRefactura";
-                string motivoRefactura = row.Table.Columns.Contains(columnaRefactura) ? row[columnaRefactura]?.ToString() ?? "" : "";
+                object motivoRefacturaObj = ObtenerValorSeguro(row, columnaRefactura);
+                string motivoRefactura = motivoRefacturaObj != DBNull.Value ? motivoRefacturaObj.ToString() : "";
 
                 if (debitoAceptado || !string.IsNullOrEmpty(motivoDebito) || !string.IsNullOrEmpty(motivoRefactura))
                 {
                     var dto = new CargaParcialDTO
                     {
-                        IdPrestacion = Convert.ToInt32(row["ID_Prestacion"]),
+                        IdPrestacion = Convert.ToInt32(ObtenerValorSeguro(row, "ID_Prestacion")),
                         DebitoAceptado = debitoAceptado,
                         MotivoDebito = motivoDebito,
-                        ImporteDebitado = row.Table.Columns.Contains("NC_ImporteDebitado") ? row["NC_ImporteDebitado"] : DBNull.Value,
+                        ImporteDebitado = ObtenerValorSeguro(row, "NC_ImporteDebitado"),
                         MotivoRefactura = motivoRefactura,
 
-                        // Asignaciones dinámicas seguras validando que la columna exista
-                        ImporteRefactura = tipoFactura == "NC" && row.Table.Columns.Contains("ND_ImporteDeRefactura") ? row["ND_ImporteDeRefactura"] : (row.Table.Columns.Contains("NC_ImporteDeRefactura") ? row["NC_ImporteDeRefactura"] : DBNull.Value),
-                        Comentarios = tipoFactura == "NC" && row.Table.Columns.Contains("ND_Comentarios") ? row["ND_Comentarios"]?.ToString() : (row.Table.Columns.Contains("NC_Comentarios") ? row["NC_Comentarios"]?.ToString() : null),
+                        ImporteRefactura = tipoFactura == "NC"
+                            ? ObtenerValorSeguro(row, "ND_ImporteDeRefactura")
+                            : ObtenerValorSeguro(row, "NC_ImporteDeRefactura"),
+
+                        Comentarios = tipoFactura == "NC"
+                            ? (ObtenerValorSeguro(row, "ND_Comentarios") != DBNull.Value ? ObtenerValorSeguro(row, "ND_Comentarios").ToString() : null)
+                            : (ObtenerValorSeguro(row, "NC_Comentarios") != DBNull.Value ? ObtenerValorSeguro(row, "NC_Comentarios").ToString() : null),
 
                         CargadoCompletamente = false,
                         Usuario = _usuarioAuditor,
@@ -220,16 +241,21 @@ namespace Debitos.Presenters
 
                     if (tipoFactura == "NC")
                     {
-                        // Validación CRÍTICA: Controlamos si existe "id" antes de asignarla
-                        dto.IdNotaDeCredito = row.Table.Columns.Contains("id") && row["id"] != DBNull.Value ? Convert.ToInt32(row["id"]) : (int?)null;
-                        dto.Codigo = row.Table.Columns.Contains("codigo") ? row["codigo"]?.ToString() : null;
+                        var idObj = ObtenerValorSeguro(row, "id");
+                        dto.IdNotaDeCredito = idObj != DBNull.Value ? Convert.ToInt32(idObj) : (int?)null;
+
+                        var codObj = ObtenerValorSeguro(row, "codigo");
+                        dto.Codigo = codObj != DBNull.Value ? codObj.ToString() : null;
                     }
                     if (tipoFactura == "FC" || tipoFactura == "ND")
                     {
-                        // Validación CRÍTICA: Controlamos si existe "id" antes de asignarla
-                        dto.IdNotaDeDebito = row.Table.Columns.Contains("id") && row["id"] != DBNull.Value ? Convert.ToInt32(row["id"]) : (int?)null;
-                        dto.PrestacionEnglobante = row.Table.Columns.Contains("NC_PrestacionEnglobante") ? row["NC_PrestacionEnglobante"]?.ToString() : null;
-                        dto.DiasFacturados = row.Table.Columns.Contains("NC_DiasFacturados") ? row["NC_DiasFacturados"] : DBNull.Value;
+                        var idObj = ObtenerValorSeguro(row, "id");
+                        dto.IdNotaDeDebito = idObj != DBNull.Value ? Convert.ToInt32(idObj) : (int?)null;
+
+                        var prestObj = ObtenerValorSeguro(row, "NC_PrestacionEnglobante");
+                        dto.PrestacionEnglobante = prestObj != DBNull.Value ? prestObj.ToString() : null;
+
+                        dto.DiasFacturados = ObtenerValorSeguro(row, "NC_DiasFacturados");
                     }
 
                     lista.Add(dto);
