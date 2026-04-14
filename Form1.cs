@@ -515,32 +515,64 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         List<string> filtros = new List<string>();
         DataTable dt = (DataTable)bindingSource.DataSource;
 
-        if (lblPacSel.Visible)
-            filtros.Add($"paciente = '{lblPacSel.Text.Replace("Paciente: ", "").Trim().Replace("'", "''")}'");
+        // Función auxiliar inteligente
+        string FormatearFiltro(string columna, string valor)
+        {
+            if (!dt.Columns.Contains(columna)) return $"[{columna}] = '{valor}'";
 
-        if (lblProfSel.Visible)
-            filtros.Add($"medico = '{lblProfSel.Text.Replace("Profesional: ", "").Trim().Replace("'", "''")}'");
+            Type tipo = dt.Columns[columna].DataType;
 
-        if (lblPrestSel.Visible)
-            filtros.Add($"codigo = '{lblPrestSel.Text.Replace("Prestación: ", "").Trim().Replace("'", "''")}'");
+            if (tipo == typeof(int) || tipo == typeof(long) || tipo == typeof(short) ||
+                tipo == typeof(decimal) || tipo == typeof(double) || tipo == typeof(float))
+            {
+                return $"[{columna}] = {valor}";
+            }
+
+            return $"[{columna}] = '{valor}'";
+        }
+
+        // BLINDAJE: Solo filtramos si la etiqueta está visible Y tiene el formato de selección activa
+        if (lblPacSel.Visible && lblPacSel.Text.StartsWith("Paciente:"))
+        {
+            string val = lblPacSel.Text.Replace("Paciente: ", "").Trim().Replace("'", "''");
+            filtros.Add(FormatearFiltro("paciente", val));
+        }
+
+        if (lblProfSel.Visible && lblProfSel.Text.StartsWith("Profesional:"))
+        {
+            string val = lblProfSel.Text.Replace("Profesional: ", "").Trim().Replace("'", "''");
+            filtros.Add(FormatearFiltro("medico", val));
+        }
+
+        if (lblPrestSel.Visible && lblPrestSel.Text.StartsWith("Prestación:"))
+        {
+            string val = lblPrestSel.Text.Replace("Prestación: ", "").Trim().Replace("'", "''");
+            filtros.Add(FormatearFiltro("codigo", val));
+        }
 
         if (lblModulo.Visible && lblModulo.Text.StartsWith("Módulo:"))
         {
             string mod = lblModulo.Text.Replace("Módulo: ", "").Trim().Replace("'", "''");
             if (dt.Columns.Contains("grupomodulo"))
-                filtros.Add($"(grupomodulo = '{mod}' OR modulo = '{mod}')");
+            {
+                string filtroGrupo = FormatearFiltro("grupomodulo", mod);
+                string filtroMod = FormatearFiltro("modulo", mod);
+                filtros.Add($"({filtroGrupo} OR {filtroMod})");
+            }
             else
-                filtros.Add($"modulo = '{mod}'");
+            {
+                filtros.Add(FormatearFiltro("modulo", mod));
+            }
         }
 
-        if (lblNumeroDeInternacionSel.Visible)
+        if (lblNumeroDeInternacionSel.Visible && lblNumeroDeInternacionSel.Text.StartsWith("Número de internación:"))
         {
             string nro = lblNumeroDeInternacionSel.Text.Replace("Número de internación: ", "").Trim().Replace("'", "''");
             string colNro = dt.Columns.Contains("nro_internacion") ? "nro_internacion" : "nro_int";
-            filtros.Add($"{colNro} = '{nro}'");
+            filtros.Add(FormatearFiltro(colNro, nro));
         }
 
-        if (lblFecSel.Visible)
+        if (lblFecSel.Visible && lblFecSel.Text.StartsWith("Fecha:"))
         {
             string fec = lblFecSel.Text.Replace("Fecha: ", "").Trim();
             if (DateTime.TryParse(fec, out DateTime dateValue))
@@ -551,16 +583,16 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         if (checkPrestacionesSinRefactura.Checked)
         {
             if (FacturaTipo == TipoDocumento.Factura || FacturaTipo == TipoDocumento.NotaDebito)
-                filtros.Add("(NC_MotivoDeRefactura IS NULL OR NC_MotivoDeRefactura = '')");
+                filtros.Add("([NC_MotivoDeRefactura] IS NULL OR [NC_MotivoDeRefactura] = '')");
             else if (FacturaTipo == TipoDocumento.NotaCredito)
-                filtros.Add("(ND_MotivoDeRefactura IS NULL OR ND_MotivoDeRefactura = '')");
+                filtros.Add("([ND_MotivoDeRefactura] IS NULL OR [ND_MotivoDeRefactura] = '')");
         }
 
         if (checkPrestacionesSinDebito.Checked)
-            filtros.Add("(NC_MotivoDeDebito IS NULL OR NC_MotivoDeDebito = '')");
+            filtros.Add("([NC_MotivoDeDebito] IS NULL OR [NC_MotivoDeDebito] = '')");
 
         if (soloPrestacionesValorizadas.Checked)
-            filtros.Add("total <> 0");
+            filtros.Add("[total] <> 0");
         // -----------------------------
 
         string filtroFinal = string.Join(" AND ", filtros);
@@ -571,7 +603,7 @@ public partial class Form1 : Form, IPrestacionesView // <-- Acá agregamos la in
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Error aplicando el filtro: " + ex.Message);
+            MessageBox.Show("Error aplicando el filtro: " + ex.Message, "Error de Filtro", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
