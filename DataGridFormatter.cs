@@ -17,6 +17,7 @@ namespace Debitos
 
             AplicarColorCelda(row.Cells["paciente"], Color.LightCyan);
             AplicarColorCelda(row.Cells["Plan"], Color.LightCyan);
+            AplicarColorCelda(row.Cells["efector"], Color.LightCyan);
             AplicarColorCelda(row.Cells["medico"], Color.LightCyan);
             AplicarColorCelda(row.Cells["fecha"], Color.LightCyan);
             AplicarColorCelda(row.Cells["codigo"], Color.LightCyan);
@@ -43,6 +44,7 @@ namespace Debitos
             if (row.IsNewRow) return;
 
             AplicarColorCelda(row.Cells["paciente"], Color.LightCyan);
+            AplicarColorCelda(row.Cells["efector"], Color.LightCyan);
             AplicarColorCelda(row.Cells["medico"], Color.LightCyan);
             AplicarColorCelda(row.Cells["fecha"], Color.LightCyan);
             AplicarColorCelda(row.Cells["codigo"], Color.LightCyan);

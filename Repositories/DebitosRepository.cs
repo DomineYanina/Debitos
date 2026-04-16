@@ -62,7 +62,7 @@ namespace Debitos.Repositories
             {
                 if (facturaTipo == "NC")
                     query = @"SELECT 
-            al.paciente, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, nc.comentarios AS NC_Comentarios,
+            al.paciente, al.plan AS Plan, al.efector, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, nc.comentarios AS NC_Comentarios,
             al.modulo AS modulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
             al.carnet, al.codigo_cobertura AS Cobertura, 
             al.cob_factura_tipo, al.cob_factura_letra, al.cob_factura_ptoventa, al.cob_factura_numero, al.id AS ID_Prestacion,
@@ -75,7 +75,7 @@ namespace Debitos.Repositories
 
                 else if (facturaTipo == "ND")
                     query = @"SELECT 
-            al.paciente, al.plan AS Plan, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, nd.comentarios,
+            al.paciente, al.plan AS Plan, al.efector, al.medico, al.fecha, al.codigo, al.descripcion, al.cantidad, al.total_neto, al.coseguro, al.total, nd.comentarios,
             al.modulo AS modulo, al.nro_internacion AS Nro_Int, al.fecha_ingreso AS F_Ingreso, al.fecha_egreso AS F_Egreso, 
             al.carnet, al.codigo_cobertura AS Cobertura, 
             nc1.letra AS NC_Previo_Letra, nc1.ptovta AS NC_Previo_PuntoDeVenta, nc1.numero AS NC_Previo_Numero, 
@@ -93,7 +93,7 @@ namespace Debitos.Repositories
 
                 else if (facturaTipo == "FC")
                     query = @"SELECT 
-            al.paciente, al.plan AS Plan, al.medico, al.fecha as Fecha, al.codigo, al.descripcion, al.cantidad AS Cantidad, al.total_neto, al.coseguro, al.total, 
+            al.paciente, al.plan AS Plan, al.efector, al.medico, al.fecha as Fecha, al.codigo, al.descripcion, al.cantidad AS Cantidad, al.total_neto, al.coseguro, al.total, 
             al.porcentaje_especialista, al.porcentaje_ayudante1, al.porcentaje_anestesista, al.porcentaje_gastos, al.id AS ID_Prestacion,
             nc.fecha AS NC_Fecha, nc.letra AS NC_Letra, nc.ptovta AS NC_PuntoDeVenta, nc.numero AS NC_Numero, nc.debitoaceptado AS NC_DebitoAceptado, nc.motivodedebito AS NC_MotivoDeDebito, nc.diasfacturados AS NC_DiasFacturados, nc.importedebitado AS NC_ImporteDebitado, 
             nc.prestacionenglobante AS NC_PrestacionEnglobante, nc.motivoderefactura AS NC_MotivoDeRefactura, nc.importederefactura AS NC_ImporteDeRefactura, nc.cargadocompletamente, nc.comentarios AS NC_Comentarios
