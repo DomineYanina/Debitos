@@ -177,8 +177,8 @@ namespace Debitos.Repositories
 
             try
             {
-                string query = @"INSERT INTO auxnc (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tiporegistro, comentarios, codigo) 
-                         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tiporegistro, @comentarios, @codigo)";
+                string query = @"INSERT INTO auxnc (id_prestacion, motivodedebito, diasfacturados, importedebitado, debitoaceptado, motivoderefactura, importederefactura, prestacionenglobante, usuario, tiporegistro, comentarios) 
+                         VALUES (@id_prestacion, @motivodedebito, @diasfacturados, @importedebitado, @debitoaceptado, @motivoderefactura, @importederefactura, @prestacionenglobante, @usuario, @tiporegistro, @comentarios)";
 
                 foreach (var item in lista)
                 {
@@ -194,7 +194,6 @@ namespace Debitos.Repositories
                     cmd.Parameters.AddWithValue("@usuario", usuario);
                     cmd.Parameters.AddWithValue("@tiporegistro", tipoRegistro);
                     cmd.Parameters.AddWithValue("@comentarios", (object?)item.comentarios ?? "");
-                    cmd.Parameters.AddWithValue("@codigo", (object?)item.codigo ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
                 transaction.Commit();
